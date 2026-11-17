@@ -1403,7 +1403,12 @@ export async function installPrebuiltRelease(
   resolved: ResolvedVersion,
   token?: string,
   env?: ChildProcessEnvironment,
+  strictIntegrity = false,
 ): Promise<InstalledCanary | undefined> {
+  const failureSuffix = strictIntegrity
+    ? "strict-integrity is enabled, so the prebuilt binary could not be obtained and installation will fail closed."
+    : "falling back to a source install.";
+
   let triple: string;
   try {
     triple = prebuiltTargetTriple(process.platform, process.arch);
@@ -1446,8 +1451,10 @@ export async function installPrebuiltRelease(
   );
   if (checksumAsset === undefined) {
     core.warning(
-      `The prebuilt release asset ${assetName} has no published checksum manifest; falling back to a ` +
-        "source install so commit/tag pinning stays the integrity mechanism (see SECURITY.md).",
+      `The prebuilt release asset ${assetName} has no published checksum manifest; ` +
+        (strictIntegrity
+          ? "strict-integrity is enabled, so the prebuilt binary could not be obtained and installation will fail closed."
+          : "falling back to a source install so commit/tag pinning stays the integrity mechanism (see SECURITY.md)."),
     );
     return undefined;
   }
@@ -1459,8 +1466,7 @@ export async function installPrebuiltRelease(
       await httpsGetFile(downloadUrl, archivePath);
     } catch (error) {
       core.warning(
-        `Failed to download the prebuilt Protocol-Canary asset ${assetName}: ${String(error)}; ` +
-          "falling back to a source install.",
+        `Failed to download the prebuilt Protocol-Canary asset ${assetName}: ${String(error)}; ${failureSuffix}`,
       );
       return undefined;
     }
@@ -1470,7 +1476,7 @@ export async function installPrebuiltRelease(
     } catch (error) {
       core.warning(
         `Could not extract the prebuilt Protocol-Canary asset ${assetName}: ` +
-          `${error instanceof Error ? error.message : String(error)}; falling back to a source install.`,
+          `${error instanceof Error ? error.message : String(error)}; ${failureSuffix}`,
       );
       return undefined;
     }
@@ -1478,8 +1484,7 @@ export async function installPrebuiltRelease(
     const discovery = discoverExtractedBinary(extractTmpDir, binaryName());
     if (discovery.binaryPath === undefined) {
       core.warning(
-        `The extracted prebuilt archive ${assetName} ${discovery.errorReason ?? "is invalid"}; ` +
-          "falling back to a source install.",
+        `The extracted prebuilt archive ${assetName} ${discovery.errorReason ?? "is invalid"}; ${failureSuffix}`,
       );
       return undefined;
     }
@@ -1489,7 +1494,7 @@ export async function installPrebuiltRelease(
       try {
         fs.chmodSync(extracted, 0o755);
       } catch {
-        core.warning(`Could not set executable permissions on ${extracted}; falling back to a source install.`);
+        core.warning(`Could not set executable permissions on ${extracted}; ${failureSuffix}`);
         return undefined;
       }
     }
@@ -1529,7 +1534,7 @@ export async function installPrebuiltRelease(
       fs.rmSync(digestSidecarPath(binaryPath), { force: true });
       core.warning(
         `The prebuilt stellar-canary asset ${assetName} reports version ${String(version)}, but ` +
-          `${resolved.version} was requested; falling back to a source install.`,
+          `${resolved.version} was requested; ${failureSuffix}`,
       );
       return undefined;
     }
@@ -1706,7 +1711,10 @@ async function cargoInstall(
  * exceeds it.
  *
  * `strictIntegrity` (issue #372, default `false`) rejects source builds,
- * including cached source builds. Release binaries require published
+ * including cached source builds. When enabled, failure to obtain a usable
+ * verified prebuilt release binary fails closed immediately with an
+ * {@link InstallationFailedError} without falling back to `cargo install` (issue #625).
+ * Release binaries require published
  * checksum verification in either mode; see {@link verifyInstalledBinary}.
  *
  * `env` is the filtered child environment every install step and probe runs
@@ -1762,10 +1770,18 @@ export async function ensureCanaryInstalled(
     return cached;
   }
 
-  const prebuilt = await installPrebuiltRelease(resolved, token, childEnv);
+  const prebuilt = await installPrebuiltRelease(resolved, token, childEnv, strictIntegrity);
   if (prebuilt !== undefined) {
     writeInstalledOrigin(prebuilt.binaryPath, prebuilt.origin);
     return prebuilt;
+  }
+
+  if (strictIntegrity) {
+    throw new InstallationFailedError(
+      `strict-integrity is enabled, but a usable verified prebuilt binary for Protocol-Canary ` +
+        `${resolved.version} could not be obtained. Source-build fallback via Cargo is disabled ` +
+        "under strict-integrity, so the run fails closed.",
+    );
   }
 
   await ensureCargoAvailable(CARGO_PROBE_TIMEOUT_MS, childEnv);
