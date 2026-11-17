@@ -71,7 +71,8 @@ vi.mock("node:os", async (importOriginal) => {
   return { ...actual, homedir: osMocks.homedirMock };
 });
 
-import { ensureCanaryInstalled } from "../../src/canary";
+import { ensureCanaryInstalled, prebuiltTargetTriple } from "../../src/canary";
+import { InstallationFailedError } from "../../src/errors";
 import type { ResolvedVersion } from "../../src/version";
 
 const RESOLVED: ResolvedVersion = { version: "0.1.0", tag: "v0.1.0", commitSha: "abc123" };
@@ -390,6 +391,16 @@ describe("strict-integrity fail-closed policy at the verification boundary (issu
     fs.writeFileSync(path.join(path.dirname(binary), "stellar-canary.origin"), "source-build\n", { mode: 0o600 });
   }
 
+  function cargoSpawned(): boolean {
+    return spawnMock.mock.calls.some((call) => call[0] === "cargo");
+  }
+
+  function cargoInstallSpawned(): boolean {
+    return spawnMock.mock.calls.some(
+      (call) => call[0] === "cargo" && Array.isArray(call[1]) && (call[1] as string[])[0] === "install",
+    );
+  }
+
   beforeEach(() => {
     tempCargoHome = fs.mkdtempSync(path.join(os.tmpdir(), "canary-strict-"));
     fs.mkdirSync(path.join(tempCargoHome, "bin"), { recursive: true });
@@ -508,5 +519,74 @@ describe("strict-integrity fail-closed policy at the verification boundary (issu
     expect(coreMocks.infoMock).toHaveBeenCalledWith(
       expect.stringContaining("release checksums do not apply to source builds"),
     );
+  });
+
+  it("fails closed with InstallationFailedError without invoking cargo when prebuilt archive download 404s (#625)", async () => {
+    const triple = prebuiltTargetTriple(process.platform, process.arch);
+    const assetName = `stellar-canary-${RESOLVED.version}-${triple}.tar.gz`;
+    httpsGetMock
+      .mockImplementationOnce(
+        respond(
+          200,
+          JSON.stringify({
+            assets: [
+              { name: assetName, browser_download_url: `https://example.test/${assetName}` },
+              { name: "SHA256SUMS", browser_download_url: "https://example.test/SHA256SUMS" },
+            ],
+          }),
+        ),
+      )
+      .mockImplementationOnce(respond(404, ""));
+
+    let thrown: unknown;
+    try {
+      await ensureCanaryInstalled(RESOLVED, 60_000, undefined, true);
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(InstallationFailedError);
+    expect((thrown as InstallationFailedError).message).toMatch(
+      /strict-integrity is enabled, but a usable verified prebuilt binary for Protocol-Canary 0\.1\.0 could not be obtained.*Source-build fallback via Cargo is disabled/s,
+    );
+    expect(cargoSpawned()).toBe(false);
+    expect(fs.existsSync(binaryPath())).toBe(false);
+  });
+
+  it("fails closed without invoking cargo when prebuilt release asset is unavailable (#625)", async () => {
+    // httpsGetMock defaults to 404 on release assets lookup
+    let thrown: unknown;
+    try {
+      await ensureCanaryInstalled(RESOLVED, 60_000, undefined, true);
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(InstallationFailedError);
+    expect((thrown as InstallationFailedError).message).toMatch(
+      /strict-integrity is enabled, but a usable verified prebuilt binary for Protocol-Canary 0\.1\.0 could not be obtained.*Source-build fallback via Cargo is disabled/s,
+    );
+    expect(cargoSpawned()).toBe(false);
+    expect(fs.existsSync(binaryPath())).toBe(false);
+  });
+
+  it("falls back to cargo install when strict-integrity is disabled and prebuilt download fails (#625)", async () => {
+    spawnMock.mockImplementation((command: string, args: string[] = []) => {
+      if (command === "cargo" && args[0] === "--version") {
+        return new ImmediateChild(0, "cargo 1.0.0\n") as unknown as ChildProcess;
+      }
+      if (command === "cargo" && args[0] === "install") {
+        writeInstalledBinary("source-compiled-canary");
+        return new ImmediateChild(0) as unknown as ChildProcess;
+      }
+      if (args[0] === "version") {
+        return new ImmediateChild(0, "stellar-canary 0.1.0\n") as unknown as ChildProcess;
+      }
+      return new ImmediateChild(0) as unknown as ChildProcess;
+    });
+
+    const installed = await ensureCanaryInstalled(RESOLVED, 60_000, undefined, false);
+    expect(installed.origin).toBe("source-build");
+    expect(installed.binaryPath).toBe(binaryPath());
+    expect(installed.version).toBe("0.1.0");
+    expect(cargoInstallSpawned()).toBe(true);
   });
 });
