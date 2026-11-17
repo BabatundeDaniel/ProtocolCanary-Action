@@ -526,7 +526,7 @@ export async function run(): Promise<void> {
       core.warning(`Failed to write the Execution Receipt: ${describeError(error)}`);
     }
     if (written) {
-      await uploadReceipt(receiptPath);
+      await uploadReceipt(receiptPath, inputs.reportRetentionDays);
     }
   }
 
