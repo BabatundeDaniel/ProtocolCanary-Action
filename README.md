@@ -156,7 +156,7 @@ jobs:
 | `cache-dir` | Directory for cached fixture results (`--cache-dir=`), forwarded to the engine **unchanged**: a relative path is resolved by the *engine* against `--project-root` when one is given — not against `GITHUB_WORKSPACE`, `fixtures-dir`, or a future `working-directory` input (#348). Missing directories are created by the engine; a path that is an existing file is rejected by the engine; it may be combined with the engine's cache-disabling flag (the engine accepts both; this Action forwards it through the `no-cache` input). Empty/whitespace means unset; control characters are rejected. Same pre-run engine gate as `fixture`: an unsupported engine fails the run rather than caching results somewhere you did not ask for. | (none) |
 | `version` | `Protocol-Canary` version to install, without a leading `v`. Pinned — never tracks `main`. | `0.2.0` |
 | `upload-report` | Upload the JSON report as a workflow artifact. | `true` |
-| `report-retention-days` | Duration in days (integer 1 to 90) to retain the uploaded JSON report artifact. If omitted, the repository's default retention is used. | (repository default) |
+| `report-retention-days` | Duration in days (integer 1 to 90) to retain uploaded artifacts (JSON report and Execution Receipt). If omitted, the repository's default retention is used. | (repository default) |
 | `annotations` | Emit GitHub annotations for failures/warnings/errors. | `true` |
 | `diagnostics` | Opt in to a best-effort redacted diagnostics log bundle when Canary cannot produce a usable report. Strictly opt-in: the artifact is downloadable by anyone who can read the repository, and the process environment is never included. | `false` |
 | `allow-empty` | Let a run that executes no checks pass (`--allow-empty`). Only meaningful with `version: 0.2.0` or newer, which fail such a run by default; older versions already pass it, so the flag is not forwarded to them. | `false` |
@@ -537,7 +537,7 @@ artifact name actually used (including any fallback suffix), and
 `steps.<id>.outputs.artifact-id` to get the artifact ID (which is also linked
 directly in the job summary when available).
 
-Retention of the report artifact can be configured using `report-retention-days`
+Retention of the report and receipt artifacts can be configured using `report-retention-days`
 (an integer between 1 and 90). When omitted, the repository's default artifact
 retention applies.
 

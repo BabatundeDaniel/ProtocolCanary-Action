@@ -283,7 +283,7 @@ describe("uploadReceipt", () => {
 
     const outcome = await uploadReceipt(RECEIPT_PATH);
 
-    expect(outcome).toEqual({ uploaded: true });
+    expect(outcome).toEqual({ uploaded: true, name: `${RECEIPT_ARTIFACT_PREFIX}-4321`, id: 7 });
     expect(uploadArtifactMock).toHaveBeenCalledTimes(1);
     expect(uploadArtifactMock).toHaveBeenCalledWith(
       `${RECEIPT_ARTIFACT_PREFIX}-4321`,
@@ -297,8 +297,8 @@ describe("uploadReceipt", () => {
 
     const outcome = await uploadReceipt(RECEIPT_PATH);
 
-    expect(outcome).toEqual({ uploaded: true });
     const name = uploadArtifactMock.mock.calls[0]?.[0] as string;
+    expect(outcome).toEqual({ uploaded: true, name, id: 8 });
     expect(name).toMatch(new RegExp(`^${RECEIPT_ARTIFACT_PREFIX}-[a-z0-9]+(-[a-z0-9]+)?$`));
     expect(name).not.toBe(RECEIPT_ARTIFACT_PREFIX);
   });
@@ -309,11 +309,77 @@ describe("uploadReceipt", () => {
 
     const outcome = await uploadReceipt(RECEIPT_PATH);
 
-    expect(outcome).toEqual({ uploaded: true });
+    const retryName = uploadArtifactMock.mock.calls[1]?.[0] as string;
+    expect(outcome).toEqual({ uploaded: true, name: retryName, id: 9 });
     expect(uploadArtifactMock).toHaveBeenCalledTimes(2);
     expect(uploadArtifactMock).toHaveBeenNthCalledWith(1, `${RECEIPT_ARTIFACT_PREFIX}-4321`, [RECEIPT_PATH], REPORT_DIR);
-    const retryName = uploadArtifactMock.mock.calls[1]?.[0] as string;
     expect(retryName).toMatch(new RegExp(`^${RECEIPT_ARTIFACT_PREFIX}-4321-[a-z0-9-]+$`));
+  });
+
+  it("forwards retentionDays option to uploadArtifact when provided", async () => {
+    process.env.GITHUB_RUN_ID = "4321";
+    uploadArtifactMock.mockResolvedValue({ id: 10, size: 10 });
+
+    const outcome = await uploadReceipt(RECEIPT_PATH, 7);
+
+    expect(outcome).toEqual({ uploaded: true, name: `${RECEIPT_ARTIFACT_PREFIX}-4321`, id: 10 });
+    expect(uploadArtifactMock).toHaveBeenCalledTimes(1);
+    expect(uploadArtifactMock).toHaveBeenCalledWith(
+      `${RECEIPT_ARTIFACT_PREFIX}-4321`,
+      [RECEIPT_PATH],
+      REPORT_DIR,
+      { retentionDays: 7 },
+    );
+  });
+
+  it("forwards retentionDays during collision retry", async () => {
+    process.env.GITHUB_RUN_ID = "4321";
+    uploadArtifactMock.mockRejectedValueOnce(conflictError()).mockResolvedValueOnce({ id: 11, size: 10 });
+
+    const outcome = await uploadReceipt(RECEIPT_PATH, 14);
+
+    const retryName = uploadArtifactMock.mock.calls[1]?.[0] as string;
+    expect(outcome).toEqual({ uploaded: true, name: retryName, id: 11 });
+    expect(uploadArtifactMock).toHaveBeenCalledTimes(2);
+    expect(uploadArtifactMock).toHaveBeenNthCalledWith(
+      1,
+      `${RECEIPT_ARTIFACT_PREFIX}-4321`,
+      [RECEIPT_PATH],
+      REPORT_DIR,
+      { retentionDays: 14 },
+    );
+    expect(uploadArtifactMock).toHaveBeenNthCalledWith(
+      2,
+      retryName,
+      [RECEIPT_PATH],
+      REPORT_DIR,
+      { retentionDays: 14 },
+    );
+  });
+
+  it("omits id from outcome when client does not return an artifact id", async () => {
+    process.env.GITHUB_RUN_ID = "4321";
+    uploadArtifactMock.mockResolvedValue({});
+
+    const outcome = await uploadReceipt(RECEIPT_PATH);
+
+    expect(outcome).toEqual({ uploaded: true, name: `${RECEIPT_ARTIFACT_PREFIX}-4321` });
+    expect(outcome.id).toBeUndefined();
+  });
+
+  it("does not forward options when retentionDays is undefined", async () => {
+    process.env.GITHUB_RUN_ID = "4321";
+    uploadArtifactMock.mockResolvedValue({ id: 12, size: 10 });
+
+    const outcome = await uploadReceipt(RECEIPT_PATH, undefined);
+
+    expect(outcome).toEqual({ uploaded: true, name: `${RECEIPT_ARTIFACT_PREFIX}-4321`, id: 12 });
+    expect(uploadArtifactMock).toHaveBeenCalledTimes(1);
+    expect(uploadArtifactMock).toHaveBeenCalledWith(
+      `${RECEIPT_ARTIFACT_PREFIX}-4321`,
+      [RECEIPT_PATH],
+      REPORT_DIR,
+    );
   });
 
   it("reports a non-collision failure through the outcome and never throws", async () => {

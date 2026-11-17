@@ -657,7 +657,18 @@ describe("run", () => {
     expect(receipt.receiptVersion).toBe(1);
     expect(receipt.engineVersion).toBe(PASS_REPORT.toolVersion);
     expect(setOutputMock).toHaveBeenCalledWith("receipt-path", receiptPath);
-    expect(uploadReceiptMock).toHaveBeenCalledWith(receiptPath);
+    expect(uploadReceiptMock).toHaveBeenCalledWith(receiptPath, undefined);
+  });
+
+  it("passes reportRetentionDays to uploadReceipt when configured (#580)", async () => {
+    getInputsMock.mockReturnValue({ ...INPUTS, generateReceipt: true, reportRetentionDays: 30 });
+    uploadReceiptMock.mockResolvedValue({ uploaded: true, name: "stellar-canary-receipt-1234", id: 50 });
+    runCheckMock.mockResolvedValueOnce({ exitCode: 0, signal: null, stdout: JSON.stringify(PASS_REPORT), stderr: "" });
+
+    await run();
+
+    const receiptPath = String(setOutputMock.mock.calls.find(([name]) => name === "receipt-path")?.[1]);
+    expect(uploadReceiptMock).toHaveBeenCalledWith(receiptPath, 30);
   });
 
   it("preserves distinct receipts across two invocations sharing RUNNER_TEMP (#493)", async () => {
@@ -680,8 +691,8 @@ describe("run", () => {
       expect(fs.existsSync(receiptPath)).toBe(true);
     }
     expect(fs.readFileSync(firstPath, "utf8")).not.toBe(fs.readFileSync(secondPath, "utf8"));
-    expect(uploadReceiptMock).toHaveBeenCalledWith(firstPath);
-    expect(uploadReceiptMock).toHaveBeenCalledWith(secondPath);
+    expect(uploadReceiptMock).toHaveBeenCalledWith(firstPath, undefined);
+    expect(uploadReceiptMock).toHaveBeenCalledWith(secondPath, undefined);
   });
 
   // Negative testing from the issue: a failed receipt upload is auxiliary —
