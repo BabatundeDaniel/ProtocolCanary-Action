@@ -92,7 +92,7 @@ export interface ActionInputs {
    * workflow artifact (#362). Parses the documented boolean literals strictly
    * and defaults to `false` when the input is omitted (#361). */
   readonly generateReceipt: boolean;
-  /** Duration in days (integer 1 to 90) to retain the uploaded JSON report artifact. */
+  /** Duration in days (integer 1 to 90) to retain uploaded report and receipt artifacts. */
   readonly reportRetentionDays: number | undefined;
   /** Render the parsed JSON report to JUnit XML through the engine's own
    * `report <file> --format junit` command (#423) and expose the file as the
@@ -386,7 +386,8 @@ function parseNetworkPassphrase(raw: string): string | undefined {
 /**
  * Validates the "report-retention-days" input as an integer from 1 to 90;
  * undefined when unset. Throws {@link InvalidInputError} naming the input
- * for non-integers or values outside 1 to 90.
+ * for non-integers or values outside 1 to 90. Applies to both JSON report
+ * and Execution Receipt artifacts.
  */
 function parseReportRetentionDays(raw: string): number | undefined {
   const value = optional(raw);
