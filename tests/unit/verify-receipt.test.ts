@@ -218,13 +218,14 @@ describe("runCli (#363) — real files and exit codes", () => {
 
   it("end-to-end through the real producer: build → serialize → files → verify exits 0", () => {
     const docReport = documentedReport();
-    // The producer reads flat keys, so a documented-shape report yields
-    // 'unknown' provenance fields; verification must still pass without
-    // false positives (spec: 'unknown' never mismatches).
+    // The producer reads documented CF-01 nested paths (run.toolBuildCommit
+    // and fixturePack.digest), so a documented-shape report populates the
+    // receipt's provenance fields directly.
     const receipt = buildReceipt(docReport as unknown as CanaryReport, TS);
     const receiptPath = write("receipt.json", serializeReceipt(receipt));
     const reportPath = write("report.json", JSON.stringify(docReport, null, 2));
-    expect(receipt.engineCommit).toBe("unknown");
+    expect(receipt.engineCommit).toBe(COMMIT);
+    expect(receipt.packDigest).toBe(DIGEST);
     expect(runCli([receiptPath, reportPath])).toBe(0);
   });
 });
