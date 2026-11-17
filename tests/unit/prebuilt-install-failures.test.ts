@@ -456,7 +456,7 @@ describe("prebuilt release install failure paths (#495)", () => {
       expect(getStagingDirs()).toEqual([]);
     });
 
-    it("does not accept the source fallback when strict integrity is enabled", async () => {
+    it("fails closed without attempting cargo source fallback when strict integrity is enabled (#625)", async () => {
       serveRelease({
         onDownload: (res, _req, callback) => {
           res.statusCode = 302;
@@ -473,11 +473,22 @@ describe("prebuilt release install failure paths (#495)", () => {
       );
 
       expect(coreMocks.warningMock).toHaveBeenCalledWith(
-        expect.stringContaining("redirects are disabled while D-11 remains blocked; falling back to a source install."),
+        expect.stringContaining("redirects are disabled while D-11 remains blocked"),
       );
-      expect(spawnMock).toHaveBeenCalledWith("cargo", expect.arrayContaining(["install"]), expect.any(Object));
-      expect(spawnMock.mock.calls.some(([, args]) => (args as string[]).includes("version"))).toBe(false);
+      expect(coreMocks.warningMock).toHaveBeenCalledWith(
+        expect.stringContaining(
+          "strict-integrity is enabled, so the prebuilt binary could not be obtained and installation will fail closed.",
+        ),
+      );
+      expect(
+        coreMocks.warningMock.mock.calls.some((call) => String(call[0]).includes("falling back to a source install")),
+      ).toBe(false);
+      expect(cargoInstallSpawned()).toBe(false);
+      expect(spawnMock.mock.calls.some(([cmd]) => cmd === "cargo")).toBe(false);
+      expect(spawnMock.mock.calls.some(([, args]) => Array.isArray(args) && (args as string[]).includes("version"))).toBe(false);
+      expect(fs.existsSync(installedBinaryPath())).toBe(false);
       assertNeverExecutedDownloadedFiles();
+      expect(getStagingDirs()).toEqual([]);
     });
 
     it("falls back to cargo install on a final status other than 200", async () => {
