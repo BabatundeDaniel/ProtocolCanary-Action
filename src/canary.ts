@@ -380,6 +380,9 @@ export function getReleaseAssetName(platform: string = process.platform, arch: s
   if (platform === "linux" && arch === "x64") {
     return "stellar-canary-linux-x86_64";
   }
+  if (platform === "linux" && arch === "arm64") {
+    return "stellar-canary-linux-aarch64";
+  }
   if (platform === "darwin" && arch === "x64") {
     return "stellar-canary-macos-x86_64";
   }
