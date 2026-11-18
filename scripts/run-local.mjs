@@ -218,6 +218,19 @@ async function main() {
         return SCRIPT_USAGE_EXIT_CODE;
       }
     }
+    if (name === "config") {
+      let configStats;
+      try {
+        configStats = fs.statSync(value, { throwIfNoEntry: false });
+      } catch (error) {
+        process.stderr.write(`error: failed to inspect config path: ${value} (${error.message})\n`);
+        return SCRIPT_USAGE_EXIT_CODE;
+      }
+      if (configStats === undefined || !configStats.isFile()) {
+        process.stderr.write(`error: config path does not exist (or is not a file): ${value}\n`);
+        return SCRIPT_USAGE_EXIT_CODE;
+      }
+    }
   }
 
   const fixes = [...inputs.input];
