@@ -162,6 +162,23 @@ describe("scripts/run-local.mjs (local runner script)", () => {
     expect(result.stdout).toContain("Action exit code: 1");
     expect(listTemp()).toEqual(before);
   }, 60_000);
+
+  it.skipIf(skipProcessScenarios)("forwards valid config file to the Action environment", async () => {
+    const configFile = path.join(tmpDir, "valid-config.toml");
+    fs.writeFileSync(configFile, "# canary config\n");
+    const before = listTemp();
+    const result = await runScript(
+      [
+        ...commonActionArgs(tmpDir),
+        "--input",
+        `config=${configFile}`,
+      ],
+      { env: { MOCK_CANARY_SCENARIO: "pass" } },
+    );
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("status=pass");
+    expect(listTemp()).toEqual(before);
+  }, 60_000);
 });
 
 describe("scripts/run-local.mjs negative cases", () => {
@@ -218,6 +235,32 @@ describe("scripts/run-local.mjs negative cases", () => {
     const result = await runScript(["--nonsense"]);
     expect(result.code).not.toBe(0);
     expect(result.stderr).toContain("--help");
+  });
+
+  it("a config path that does not exist is rejected without running the Action", async () => {
+    const before = listTemp();
+    const result = await runScript([
+      "--engine",
+      MOCK_ENGINE,
+      "--input",
+      "config=nonexistent.toml",
+    ]);
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain("config path does not exist (or is not a file)");
+    expect(listTemp()).toEqual(before);
+  });
+
+  it("a directory passed as config is rejected without running the Action", async () => {
+    const before = listTemp();
+    const result = await runScript([
+      "--engine",
+      MOCK_ENGINE,
+      "--input",
+      `config=${tmpDir}`,
+    ]);
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain("config path does not exist (or is not a file)");
+    expect(listTemp()).toEqual(before);
   });
 
   it.skipIf(skipProcessScenarios)("an interrupt during the run kills the child, cleans up, and exits non-zero", async () => {
