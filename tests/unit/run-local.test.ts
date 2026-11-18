@@ -57,12 +57,12 @@ function runScript(
   });
 }
 
-function commonActionArgs(tmpDir: string): string[] {
+function commonActionArgs(tmpDir: string, engine: string = MOCK_ENGINE): string[] {
   const fixturesDir = path.join(tmpDir, "fixtures-checked-for-existence");
   fs.mkdirSync(fixturesDir, { recursive: true });
   return [
     "--engine",
-    MOCK_ENGINE,
+    engine,
     "--fixtures-dir",
     fixturesDir,
     "--input",
@@ -166,17 +166,45 @@ describe("scripts/run-local.mjs (local runner script)", () => {
   it.skipIf(skipProcessScenarios)("forwards valid config file to the Action environment", async () => {
     const configFile = path.join(tmpDir, "valid-config.toml");
     fs.writeFileSync(configFile, "# canary config\n");
+
+    const wrapperEngine = path.join(tmpDir, "mock-canary-wrapper.cjs");
+    const capturedArgsFile = path.join(tmpDir, "captured-check-args.json");
+    const wrapperContent = `#!/usr/bin/env node
+"use strict";
+const fs = require("node:fs");
+const { spawnSync } = require("node:child_process");
+
+const args = process.argv.slice(2);
+if (args[0] === "check") {
+  fs.writeFileSync(${JSON.stringify(capturedArgsFile)}, JSON.stringify(args));
+}
+const child = spawnSync(process.execPath, [${JSON.stringify(MOCK_ENGINE)}, ...args], {
+  stdio: "inherit",
+  env: process.env,
+});
+process.exit(child.status ?? (child.signal !== null ? 1 : 0));
+`;
+    fs.writeFileSync(wrapperEngine, wrapperContent, { mode: 0o755 });
+
     const before = listTemp();
     const result = await runScript(
       [
-        ...commonActionArgs(tmpDir),
+        ...commonActionArgs(tmpDir, wrapperEngine),
         "--input",
         `config=${configFile}`,
       ],
       { env: { MOCK_CANARY_SCENARIO: "pass" } },
     );
+
     expect(result.code).toBe(0);
     expect(result.stdout).toContain("status=pass");
+
+    expect(fs.existsSync(capturedArgsFile)).toBe(true);
+    const capturedArgs = JSON.parse(fs.readFileSync(capturedArgsFile, "utf8")) as string[];
+    const configFlagIndex = capturedArgs.indexOf("--config");
+    expect(configFlagIndex).toBeGreaterThanOrEqual(0);
+    expect(capturedArgs[configFlagIndex + 1]).toBe(configFile);
+
     expect(listTemp()).toEqual(before);
   }, 60_000);
 });
