@@ -4,8 +4,34 @@ import type { IncomingMessage } from "node:http";
  * enforce these limits on decoded bytes. The issue #500 baseline is a 94-byte
  * manifest and roughly 5 MB binary: these allow substantial growth while
  * bounding memory/disk consumption. API pages/releases have a separate budget. */
+/**
+ * Maximum body size, in bytes (4 MiB = 4 * 1024 * 1024), for a GitHub API or
+ * text response. Applied through `githubFetch` (`src/github.ts`, default
+ * limit) and `httpsGetText` (`src/canary.ts`, default limit), which cover
+ * release and tag lookups such as `src/version.ts`. Not a limit on the
+ * checksum manifest or on release binaries, which have their own constants.
+ * Non-goal: it is not an on-disk budget and does not bound the number of
+ * pages or requests.
+ */
 export const MAX_API_RESPONSE_BYTES = 4 * 1024 * 1024;
+/**
+ * Maximum body size, in bytes (1 MiB = 1024 * 1024), for the release
+ * checksum manifest. Passed to `githubFetch` in `src/canary.ts` when the
+ * manifest asset is fetched to verify a downloaded engine binary. A larger
+ * manifest is rejected; the lookup then fails and the binary is not verified
+ * or trusted. Non-goal: it does not limit the release asset itself, and it is
+ * not a limit on the number of manifest entries.
+ */
 export const MAX_CHECKSUM_MANIFEST_BYTES = 1024 * 1024;
+/**
+ * Maximum body size, in bytes (64 MiB = 64 * 1024 * 1024), for one downloaded
+ * release asset (the prebuilt engine archive or binary). Passed to
+ * `consumeResponse` by the release-asset downloader in `src/canary.ts`, which
+ * writes chunks to disk; exceeding it aborts the download and the partial
+ * file is not used. Non-goal: it is not a checksum or integrity check, does
+ * not bound extracted size, and does not apply to API responses or the
+ * manifest.
+ */
 export const MAX_RELEASE_ASSET_BYTES = 64 * 1024 * 1024;
 
 /** Consume a complete response, rejecting before delivering any over-budget
