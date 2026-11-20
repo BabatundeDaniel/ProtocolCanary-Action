@@ -36,8 +36,10 @@ not know what CAP-83 or CAP-85 mean, does not reimplement XDR/RPC/Soroban
 testing, and never reinterprets a compatibility result the CLI didn't
 report. It:
 
-1. installs the requested `Protocol-Canary` version (from source, pinned —
-   see [Installation & integrity](#installation--integrity));
+1. installs the requested `Protocol-Canary` version: a checksum-verified
+   prebuilt release binary when one is available for the runner, otherwise
+   a pinned source build (see
+   [Installation & integrity](#installation--integrity));
 2. runs `stellar-canary check --format json` with your inputs;
 3. publishes a GitHub job summary and (optionally) annotations from that
    JSON;
@@ -55,10 +57,14 @@ Canonical fixtures live in
 Before following the quick-start example, make sure the runner meets the
 requirements below:
 
-- A Rust/Cargo toolchain is available. This Action installs
-  `Protocol-Canary` from source with `cargo install --git`, so a
-  self-hosted or non-Ubuntu runner must install Rust first; GitHub-hosted
-  Ubuntu runners include Cargo by default.
+- A Rust/Cargo toolchain is available **when no usable prebuilt exists**.
+  The Action first tries a checksum-verified prebuilt release binary for the
+  runner's platform. Prebuilts are only attempted for Linux (x64, arm64),
+  macOS (x64, arm64) and Windows x64, and only when the release publishes a
+  matching asset and checksum manifest. Otherwise (and unless
+  `strict-integrity: true`) it falls back to `cargo install --git`, so a
+  self-hosted or non-Ubuntu runner without a prebuilt must install Rust
+  first; GitHub-hosted Ubuntu runners include Cargo by default.
 - The `version` input matches a real release tag in
   `StellarCanary/Protocol-Canary`. It is pinned to a specific upstream
   release and never tracks `main`.
@@ -545,10 +551,14 @@ retention applies.
 
 Engine [v0.2.0](https://github.com/StellarCanary/Protocol-Canary/releases/tag/v0.2.0)
 publishes the binary `stellar-canary-linux-x86_64` and `SHA256SUMS`.
-The Action's prebuilt installer expects an archive for the requested
-platform; a raw binary release alone does not make that archive path
-available. When no usable prebuilt archive exists, the Action installs
-with `cargo install --git`, pinned to the immutable commit the requested version's tag
+The Action's prebuilt installer expects a release archive for the runner's
+target (`stellar-canary-<version>-<target>.tar.gz`) and a checksum-manifest
+entry for the exact platform binary name; a raw binary release alone does not
+make that archive path available, and no prebuilt is promised for an
+unsupported platform or a release that does not publish one. The prebuilt
+download follows no redirects, and a checksum proves integrity only, not the
+release author's identity. When no usable prebuilt exists, the Action installs
+with `cargo install --git` (unless `strict-integrity: true`), pinned to the immutable commit the requested version's tag
 resolved to at run time (falling back to the tag itself, with a warning, if
 that resolution fails) — see `src/version.ts` and `src/canary.ts`. This
 requires a Rust/Cargo toolchain on the runner; GitHub-hosted Ubuntu

@@ -38,14 +38,28 @@ export const DEPRECATED_BELOW_ENGINE_VERSION = "0.1.0";
 /** The newest engine release this Action is validated against. */
 export const LATEST_VALIDATED_ENGINE_VERSION = "0.1.1";
 
+/**
+ * The result of {@link assessEngineVersion}: how a requested Engine version
+ * relates to the range this Action supports. It is advisory only. It never
+ * selects, rewrites or rejects a version; the caller decides whether to emit
+ * the {@link EngineVersionCompatibility.warning} as an annotation.
+ */
 export interface EngineVersionCompatibility {
   /** The version as assessed, trimmed. */
   readonly version: string;
-  /** Whether the version is inside the supported `>= 0.1.1`, `0.x` range. */
+  /**
+   * Whether the version is inside the supported range: major `0` and
+   * `>= 0.1.1` ({@link MIN_SUPPORTED_ENGINE_VERSION}). `0.1.0` is therefore
+   * `false` here yet carries no warning, and an unvalidated `>= 1.0.0` release
+   * is also `false`.
+   */
   readonly supported: boolean;
   /**
    * A human-readable warning to emit as a GitHub annotation, or `undefined`
    * when the version needs no warning (including the default `0.1.1`).
+   * Set only for a release older than `0.1.0` (deprecated) or for a
+   * `>= 1.0.0` release this Action has not validated. A `0.x` release newer
+   * than the latest validated one is neither flagged unsupported nor warned.
    */
   readonly warning: string | undefined;
 }
@@ -127,10 +141,17 @@ const TAGS_PER_PAGE = 100;
  */
 const MAX_TAG_PAGES = 50;
 
+/**
+ * The outcome of {@link resolveVersion}: the requested Engine version, the
+ * upstream git tag derived from it, and the commit that tag pointed to when
+ * the lookup succeeded. This is the trust pin used when installing the Engine.
+ * Resolution never throws, so an unresolved commit is expressed as
+ * `commitSha: undefined` rather than as an error.
+ */
 export interface ResolvedVersion {
-  /** The bare semantic version, e.g. "0.1.0". */
+  /** The bare semantic version, as passed to {@link resolveVersion}, e.g. "0.1.0". */
   readonly version: string;
-  /** The git tag this version corresponds to, e.g. "v0.1.0". */
+  /** The git tag this version corresponds to: `v` plus the version, e.g. "v0.1.0". */
   readonly tag: string;
   /**
    * The commit the tag pointed to at resolution time, when it could be
@@ -143,10 +164,13 @@ export interface ResolvedVersion {
   readonly commitSha: string | undefined;
 }
 
+/** Options for {@link resolveVersion}. */
 export interface ResolveVersionOptions {
   /**
    * GitHub token used to authenticate the tag lookup. When omitted, the
-   * `GITHUB_TOKEN` environment variable is used if it is set. Passing a
+   * `GITHUB_TOKEN` environment variable is used if it is set. The token
+   * only affects the lookup's rate limit; it never changes which version or
+   * tag is resolved. Passing a
    * token raises the GitHub REST rate limit from 60 to 1,000+ requests per
    * hour per source IP, which matters because GitHub-hosted runners share
    * IP ranges across many concurrent jobs.

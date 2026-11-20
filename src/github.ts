@@ -4,8 +4,25 @@ import type { IncomingHttpHeaders } from "node:http";
 import { consumeResponse, MAX_API_RESPONSE_BYTES } from "./http-response";
 import { isExactGithubApiUrl, parseSafeHttpsUrl } from "./safe-url";
 
+/**
+ * Failure category carried by {@link GitHubRequestError}:
+ * - `network`: the request errored before a response (DNS, connection, TLS, socket error).
+ * - `timeout`: a per-request or overall time limit elapsed.
+ * - `server`: GitHub answered with a status of 500 or above.
+ * - `rate-limit`: a 403 or 429 response with `x-ratelimit-remaining: 0` or a `retry-after` header.
+ * - `http`: any other non-200 status, a refused unsafe URL, or a response that
+ *   could not be read (for example one over the size limit or aborted).
+ * Only `network`, `timeout` and `server` failures are retried.
+ */
 export type GitHubRequestFailureKind = "network" | "timeout" | "server" | "rate-limit" | "http";
 
+/**
+ * Error thrown by the GitHub request helpers. `kind` classifies the failure;
+ * `statusCode` is the HTTP status when a response was received (or when a body
+ * read failed after a 200). `resetAt` (from `x-ratelimit-reset`) and
+ * `retryAfterMs` (from `retry-after`) are set only when GitHub sent a valid
+ * value for those headers on a non-200 response.
+ */
 export class GitHubRequestError extends Error {
   constructor(
     message: string,
@@ -203,6 +220,19 @@ export async function githubFetch(
   );
 }
 
+/**
+ * GETs `url` and returns the response body as UTF-8 text.
+ *
+ * Only HTTPS URLs that pass the safe-URL checks are requested; others are
+ * refused with a `http` {@link GitHubRequestError} before any connection. The
+ * bearer `token` is sent only to an exact `api.github.com` URL, never to other
+ * hosts. Only a 200 response is accepted (redirects are not followed and
+ * surface as `http` errors), and the body is limited to 4 MiB
+ * (`MAX_API_RESPONSE_BYTES`). Each attempt times out after 10 seconds, with a
+ * 25 second overall limit, and `network`, `timeout` and `server` failures are
+ * retried up to 3 attempts in total. Failures are thrown as
+ * {@link GitHubRequestError}.
+ */
 export async function githubGetText(url: string, token?: string): Promise<string> {
   const { body } = await githubFetch(url, token);
   return body;
