@@ -20,9 +20,24 @@ export interface ActionInputs {
    * `buildCheckArgs` for why the default is deliberately not forwarded. */
   readonly workingDirectory: string;
   readonly network: string | undefined;
+  /** The `network-passphrase` input: the expected Stellar network passphrase.
+   * `undefined` when the input is omitted (its `action.yml` default is a
+   * `\u0001` sentinel, not a real value). An explicit value is kept
+   * untrimmed, must be non-empty and free of control characters, and is
+   * masked as a secret. Forwarded as `--network-passphrase` only when set and
+   * the engine is Protocol-Canary 0.3.0 or newer; older engines skip it with a
+   * logged note. */
   readonly networkPassphrase: string | undefined;
   readonly rpcUrl: string | undefined;
+  /** The `rpc-max-retries` input: retries after a failed RPC attempt, an
+   * integer from 0 to 4294967295 (0 disables retries). `undefined` when unset,
+   * leaving the engine default. Forwarded as `--rpc-max-retries` only when set
+   * and the engine is Protocol-Canary 0.3.0 or newer. */
   readonly rpcMaxRetries: number | undefined;
+  /** The `rpc-retry-delay-ms` input: base delay in milliseconds between RPC
+   * retries, an integer from 0 to `Number.MAX_SAFE_INTEGER`. `undefined` when
+   * unset, leaving the engine default. Forwarded as `--rpc-retry-delay-ms`
+   * only when set and the engine is Protocol-Canary 0.3.0 or newer. */
   readonly rpcRetryDelayMs: number | undefined;
   readonly fixturesDir: string;
   /** Run only the fixture with this exact id (`--fixture=<id>`, #458).
@@ -92,7 +107,7 @@ export interface ActionInputs {
    * workflow artifact (#362). Parses the documented boolean literals strictly
    * and defaults to `false` when the input is omitted (#361). */
   readonly generateReceipt: boolean;
-  /** Duration in days (integer 1 to 90) to retain the uploaded JSON report artifact. */
+  /** Duration in days (integer 1 to 90) to retain uploaded report and receipt artifacts. */
   readonly reportRetentionDays: number | undefined;
   /** Render the parsed JSON report to JUnit XML through the engine's own
    * `report <file> --format junit` command (#423) and expose the file as the
@@ -104,6 +119,11 @@ export interface ActionInputs {
   /** Fail closed whenever binary integrity cannot be proven (issue #372).
    * Default `false` preserves the historical degrade-to-pinning behaviour. */
   readonly strictIntegrity: boolean;
+  /** The `pr-comment` input: opt in to a bounded pull request summary comment.
+   * Defaults to `false`. It is handled by the Action itself and is never
+   * forwarded to the engine. The comment is posted only on
+   * same-repository `pull_request` runs with `pull-requests: write`; fork PRs
+   * and other events are skipped, and permission failures are warnings. */
   readonly prComment: boolean;
 }
 
@@ -386,7 +406,8 @@ function parseNetworkPassphrase(raw: string): string | undefined {
 /**
  * Validates the "report-retention-days" input as an integer from 1 to 90;
  * undefined when unset. Throws {@link InvalidInputError} naming the input
- * for non-integers or values outside 1 to 90.
+ * for non-integers or values outside 1 to 90. Applies to both JSON report
+ * and Execution Receipt artifacts.
  */
 function parseReportRetentionDays(raw: string): number | undefined {
   const value = optional(raw);

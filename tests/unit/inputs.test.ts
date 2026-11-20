@@ -60,6 +60,7 @@ const INPUT_KEYS = [
   "INPUT_REPORT-RETENTION-DAYS",
   "INPUT_PR-COMMENT",
   "INPUT_JUNIT-REPORT",
+  "INPUT_STRICT-INTEGRITY",
 ];
 
 function clearInputs(): void {
@@ -1536,3 +1537,57 @@ describe("engine-env-passthrough", () => {
     expect(() => parse("aws_secret_access_key")).toThrow(InvalidInputError);
   });
 });
+
+describe("boolean inputs validation (#654)", () => {
+  beforeEach(clearInputs);
+  afterEach(clearInputs);
+
+  const BOOLEAN_INPUTS = [
+    { name: "upload-report", envKey: "INPUT_UPLOAD-REPORT", defaultVal: true },
+    { name: "annotations", envKey: "INPUT_ANNOTATIONS", defaultVal: true },
+    { name: "diagnostics", envKey: "INPUT_DIAGNOSTICS", defaultVal: false },
+    { name: "allow-empty", envKey: "INPUT_ALLOW-EMPTY", defaultVal: false },
+    { name: "no-cache", envKey: "INPUT_NO-CACHE", defaultVal: undefined },
+    { name: "fail-on-warning", envKey: "INPUT_FAIL-ON-WARNING", defaultVal: false },
+    { name: "offline", envKey: "INPUT_OFFLINE", defaultVal: false },
+    { name: "generate-receipt", envKey: "INPUT_GENERATE-RECEIPT", defaultVal: false },
+    { name: "junit-report", envKey: "INPUT_JUNIT-REPORT", defaultVal: false },
+    { name: "strict-integrity", envKey: "INPUT_STRICT-INTEGRITY", defaultVal: false },
+    { name: "pr-comment", envKey: "INPUT_PR-COMMENT", defaultVal: false },
+  ] as const;
+
+  it.each(BOOLEAN_INPUTS)(
+    "preserves documented default for $name when omitted",
+    ({ name, defaultVal }) => {
+      const inputs = getInputs();
+      const camel = name.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase()) as keyof typeof inputs;
+      expect(inputs[camel]).toBe(defaultVal);
+    },
+  );
+
+  const INVALID_BOOLEAN_LITERALS = [
+    "yes",
+    "no",
+    "1",
+    "0",
+    "TRUE_VAL",
+    "enabled",
+    "disabled",
+    "tru",
+    "fals",
+    "null",
+  ];
+
+  describe.each(BOOLEAN_INPUTS)("input: $name", ({ name, envKey }) => {
+    it.each(INVALID_BOOLEAN_LITERALS)(
+      "rejects invalid boolean literal %j with InvalidInputError naming the input",
+      (invalidValue) => {
+        process.env[envKey] = invalidValue;
+        expect(() => getInputs()).toThrow(InvalidInputError);
+        expect(() => getInputs()).toThrow(new RegExp(`"${name}"`));
+        expect(() => getInputs()).toThrow(/Expected one of true\/True\/TRUE\/false\/False\/FALSE/);
+      },
+    );
+  });
+});
+

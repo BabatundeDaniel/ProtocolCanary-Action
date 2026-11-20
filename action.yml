@@ -169,9 +169,9 @@ inputs:
 
   report-retention-days:
     description: >-
-      Duration in days (integer from 1 to 90) to retain the uploaded JSON
-      report artifact. If omitted, GitHub's default retention for the
-      repository is used.
+      Duration in days (integer from 1 to 90) to retain uploaded artifacts
+      (JSON report and Execution Receipt). If omitted, GitHub's default retention
+      for the repository is used.
     required: false
 
   annotations:
