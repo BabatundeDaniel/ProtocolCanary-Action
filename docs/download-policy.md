@@ -81,3 +81,28 @@ and credentials. `tests/unit/canary.test.ts` pins the current runtime behavior:
 one request, no `Location` follow-up, partial-file cleanup, and bounded total
 download time. Integration tests cover the Engine source fallback and the
 strict-integrity rejection path.
+
+## Prebuilt binary checksum verification sequence
+
+The Action enforces a strict, multi-step cryptographic verification sequence before any prebuilt Engine binary or fixture-pack archive is executed or extracted. The verification lifecycle proceeds as follows:
+
+### 1. Checksum manifest discovery and retrieval
+When resolving a release version (e.g. `v0.2.0`), the runner queries release asset metadata through `api.github.com`. It identifies the official cryptographic manifest matching `/(sha-?256|sha-?512|checksums?|shasums?)/i` (such as `SHA256SUMS` or `checksums.txt`). The manifest download is strictly bounded by `MAX_CHECKSUM_MANIFEST_BYTES` (64 KiB) and a 10-second timeout over an authenticated HTTPS connection.
+
+### 2. Manifest parsing and digest mapping
+The runner parses the manifest text line by line according to standard `sha256sum` formatting (`<64 lowercase hex digest> [ *]<filename>`). It maps each target platform asset name (e.g. `stellar-canary-linux-x86_64`) to its authoritative expected SHA-256 digest using `parseChecksumManifest` and `selectExpectedChecksum`.
+
+### 3. Archive and binary hash calculation
+Before extraction or invocation, the downloaded artifact is read from disk and hashed via Node's `crypto.createHash("sha256")`. The computed digest is compared against the expected manifest hash using constant-time string normalization (`actual.toLowerCase() === expected.toLowerCase()`). For fixture packs, the pack directory content is also verified against the canonical `packDigest` (`sha256:<64 lowercase hex>`).
+
+### 4. Failure modes and security abort conditions
+
+| Condition | Default behavior (`strict-integrity: false`) | Strict mode (`strict-integrity: true`) |
+|---|---|---|
+| **Checksum mismatch** | Throws `ChecksumMismatchError`. Execution aborts immediately; unverified binary is removed and never executed or cached. | Throws `ChecksumMismatchError`. Execution aborts immediately. |
+| **Missing manifest** | Emits warning and falls back to commit/tag pinned source build via `cargo install`. | Throws `SecurityError`. Fails closed before compiling from source, preventing unverified execution. |
+| **Asset missing from manifest** | Refuses release asset; falls back to pinned source build. | Throws `SecurityError`. Fails closed immediately. |
+| **Corrupted download** | Hash check fails before decompression; archive is deleted and download is aborted. | Hash check fails before decompression; download is aborted. |
+
+Under no circumstances is an unverified release binary executed by the runner.
+
