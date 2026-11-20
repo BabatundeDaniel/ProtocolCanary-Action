@@ -6,11 +6,11 @@ integrity guarantees it does and does not make, and the two open decisions
 (D-07 and D-11) that bound those guarantees. It complements
 [`SECURITY.md`](../SECURITY.md), which states the policy; this document
 explains the model behind it and where each claim lives in the
-implementation. The fork-PR *threat* model authored alongside it
-(permissions scoping and boundary conformance, issue #369) will be
-maintained by the sibling document `docs/security-model.md` (currently on
-open PR #461) — these two documents cover different axes and are meant to
-be read together.
+implementation. Its sibling, [`docs/security-model.md`](security-model.md),
+covers the fork-PR *threat* model (permissions scoping and boundary
+conformance, issue #369). The two documents cover different axes and are
+meant to be read together: this one owns the integrity of the binary the
+Action runs, the other owns what untrusted pull requests can reach.
 
 ## Trust boundaries
 
@@ -109,12 +109,19 @@ it.
 ## Provenance & Trust summary section (issue #373)
 
 `src/summary.ts` renders a per-run table with the executed engine's
-version, the SHA-256 computed directly from the executed binary,
-and the fixture-pack digest once the download pipeline
-(#338) produces one. Metadata a run does not actually have is rendered as
-explicitly *unverified*, never omitted and never fabricated, and the
-section always carries the D-07/D-11 caveat so a summary screenshot cannot
-be read out of context.
+version and the SHA-256 computed directly from the executed binary. The
+summary also has a fixture-pack row, but on the current run path
+(`src/main.ts`) no verified pack digest is passed to the summary renderer,
+so that row is always rendered as *unverified*. The digest helper in
+`src/canary.ts` is not wired into the run. Metadata a run does not actually
+have is rendered as explicitly *unverified*, never omitted and never
+fabricated, and the section always carries the D-07/D-11 caveat so a
+summary screenshot cannot be read out of context.
+
+The opt-in execution receipt (`generate-receipt`, issue #360) is not part of
+the summary. It is a separate JSON file written after the summary has been
+rendered, uploaded as its own artifact, and reported through the
+`receipt-path` output.
 
 ## Least-privilege permissions and the fork PR trust boundary (issue #369)
 
@@ -124,7 +131,7 @@ used only opportunistically for rate limiting, and the reusable workflow
 ([`docs/reusable-workflow.md`](reusable-workflow.md)) documents the
 `pull_request` target model in which fork PRs run with a read-only token
 and no secrets. The detailed fork-PR threat analysis and the conformance
-tests live with the sibling `docs/security-model.md` line of work (#461);
+tests live with the sibling [`docs/security-model.md`](security-model.md);
 this document owns the integrity axis: what the Action trusts about the
 binary it runs and the channels it verifies it over.
 
@@ -148,10 +155,8 @@ binary it runs and the channels it verifies it over.
 - D-11: redirect allowlist / hop budget / header policy is blocked. The
   candidate module is tested but not wired into runtime; maintainers still
   need to approve the observed host pair and proposed behavior.
-- #338: fixture-pack download with redirect and size limits — the pack
-  digest row in the summary stays "unverified" until this lands.
-- #360: execution receipt serialization (open PR) will feed additional
-  per-run provenance into the same summary section.
+- Fixture-pack digest: the summary does not receive a verified pack digest
+  on the current run path, so its pack row stays "unverified".
 
 ## References
 
