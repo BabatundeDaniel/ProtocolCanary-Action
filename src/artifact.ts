@@ -201,13 +201,23 @@ export function receiptArtifactName(runId: string | undefined): string {
  * collides on it (409), the upload retries once under a short unique suffix,
  * mirroring the report artifact's collision behavior.
  */
-export async function uploadReceipt(receiptPath: string): Promise<ArtifactUploadOutcome> {
+export async function uploadReceipt(
+  receiptPath: string,
+  retentionDays?: number,
+): Promise<ArtifactUploadOutcome> {
   let name = receiptArtifactName(process.env.GITHUB_RUN_ID);
   const preferredName = name;
+  const options = retentionDays !== undefined ? { retentionDays } : undefined;
   try {
     const client = new DefaultArtifactClient();
+    let response;
     try {
-      await client.uploadArtifact(name, [receiptPath], path.dirname(receiptPath));
+      response = await client.uploadArtifact(
+        name,
+        [receiptPath],
+        path.dirname(receiptPath),
+        ...(options !== undefined ? [options] : []),
+      );
     } catch (error) {
       if (!isArtifactNameCollision(error)) {
         throw error;
@@ -218,10 +228,19 @@ export async function uploadReceipt(receiptPath: string): Promise<ArtifactUpload
         `Artifact name "${preferredName}" is already used in this workflow run; ` +
           `uploading this receipt as "${name}" instead.`,
       );
-      await client.uploadArtifact(name, [receiptPath], path.dirname(receiptPath));
+      response = await client.uploadArtifact(
+        name,
+        [receiptPath],
+        path.dirname(receiptPath),
+        ...(options !== undefined ? [options] : []),
+      );
     }
     core.info(`Uploaded ${name} artifact.`);
-    return { uploaded: true };
+    return {
+      uploaded: true,
+      name,
+      ...(response?.id !== undefined ? { id: response.id } : {}),
+    };
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     core.warning(`Failed to upload ${name} artifact: ${reason}`);

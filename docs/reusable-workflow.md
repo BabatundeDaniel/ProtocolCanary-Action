@@ -130,10 +130,15 @@ jobs:
   no regression verdict is produced. `fixtures-version` is validated but has
   no fixture-pack command to forward to. The workflow warns rather than
   silently pretending they applied.
-- `project-root` currently scopes configuration and fixture discovery only;
-  the Action has no `working-directory` input yet (issue #348). A project
-  whose `.stellar-canary.toml` and fixtures live outside those paths needs
-  the single-step Action until that lands.
+- The reusable workflow and the single-step Action expose different inputs
+  for choosing a project directory. The workflow accepts `project-root`,
+  which scopes configuration and fixture discovery only: it selects
+  `<project-root>/.stellar-canary.toml` and `<project-root>/fixtures`, and the
+  workflow does not forward `working-directory` to the Action. The
+  single-step Action separately accepts `working-directory`, which it
+  forwards to the engine as `--project-root` (this needs an engine release
+  that supports that flag). A project that needs the engine itself to run
+  against a different root should use the single-step Action.
 - The report artifact is uploaded as
   `stellar-protocol-canary-report`, the Action's stable artifact name. A
   caller running the workflow twice in one workflow run gets the Action's

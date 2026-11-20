@@ -1065,6 +1065,7 @@ describe("ensureCanaryInstalled", () => {
   // digest. (Old #273 contract removed.)
   it.each([
     ["linux", "x64", "stellar-canary-linux-x86_64"],
+    ["linux", "arm64", "stellar-canary-linux-aarch64"],
     ["darwin", "x64", "stellar-canary-macos-x86_64"],
     ["darwin", "arm64", "stellar-canary-macos-aarch64"],
     ["win32", "x64", "stellar-canary-windows-x86_64.exe"],
@@ -1081,6 +1082,7 @@ describe("ensureCanaryInstalled", () => {
   });
 
   it.each([
+    ["linux", "arm64"],
     ["darwin", "x64"],
     ["darwin", "arm64"],
     ["win32", "x64"],
@@ -1107,7 +1109,7 @@ describe("ensureCanaryInstalled", () => {
 
   it("does not map an unsupported platform or architecture to a generic binary name", () => {
     const entries = new Map([["stellar-canary", "a".repeat(64)]]);
-    for (const [platform, arch] of [["linux", "arm64"], ["win32", "arm64"], ["freebsd", "x64"]]) {
+    for (const [platform, arch] of [["linux", "riscv64"], ["win32", "arm64"], ["freebsd", "x64"]]) {
       const assetName = getReleaseAssetName(platform, arch);
       expect(assetName).toBeUndefined();
       expect(selectExpectedChecksum(entries, assetName)).toBeUndefined();
