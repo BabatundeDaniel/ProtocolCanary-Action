@@ -36,8 +36,10 @@ not know what CAP-83 or CAP-85 mean, does not reimplement XDR/RPC/Soroban
 testing, and never reinterprets a compatibility result the CLI didn't
 report. It:
 
-1. installs the requested `Protocol-Canary` version (from source, pinned —
-   see [Installation & integrity](#installation--integrity));
+1. installs the requested `Protocol-Canary` version: a checksum-verified
+   prebuilt release binary when one is available for the runner, otherwise
+   a pinned source build (see
+   [Installation & integrity](#installation--integrity));
 2. runs `stellar-canary check --format json` with your inputs;
 3. publishes a GitHub job summary and (optionally) annotations from that
    JSON;
@@ -55,10 +57,14 @@ Canonical fixtures live in
 Before following the quick-start example, make sure the runner meets the
 requirements below:
 
-- A Rust/Cargo toolchain is available. This Action installs
-  `Protocol-Canary` from source with `cargo install --git`, so a
-  self-hosted or non-Ubuntu runner must install Rust first; GitHub-hosted
-  Ubuntu runners include Cargo by default.
+- A Rust/Cargo toolchain is available **when no usable prebuilt exists**.
+  The Action first tries a checksum-verified prebuilt release binary for the
+  runner's platform. Prebuilts are only attempted for Linux (x64, arm64),
+  macOS (x64, arm64) and Windows x64, and only when the release publishes a
+  matching asset and checksum manifest. Otherwise (and unless
+  `strict-integrity: true`) it falls back to `cargo install --git`, so a
+  self-hosted or non-Ubuntu runner without a prebuilt must install Rust
+  first; GitHub-hosted Ubuntu runners include Cargo by default.
 - The `version` input matches a real release tag in
   `StellarCanary/Protocol-Canary`. It is pinned to a specific upstream
   release and never tracks `main`.
@@ -156,7 +162,7 @@ jobs:
 | `cache-dir` | Directory for cached fixture results (`--cache-dir=`), forwarded to the engine **unchanged**: a relative path is resolved by the *engine* against `--project-root` when one is given — not against `GITHUB_WORKSPACE`, `fixtures-dir`, or a future `working-directory` input (#348). Missing directories are created by the engine; a path that is an existing file is rejected by the engine; it may be combined with the engine's cache-disabling flag (the engine accepts both; this Action forwards it through the `no-cache` input). Empty/whitespace means unset; control characters are rejected. Same pre-run engine gate as `fixture`: an unsupported engine fails the run rather than caching results somewhere you did not ask for. | (none) |
 | `version` | `Protocol-Canary` version to install, without a leading `v`. Pinned — never tracks `main`. | `0.2.0` |
 | `upload-report` | Upload the JSON report as a workflow artifact. | `true` |
-| `report-retention-days` | Duration in days (integer 1 to 90) to retain the uploaded JSON report artifact. If omitted, the repository's default retention is used. | (repository default) |
+| `report-retention-days` | Duration in days (integer 1 to 90) to retain uploaded artifacts (JSON report and Execution Receipt). If omitted, the repository's default retention is used. | (repository default) |
 | `annotations` | Emit GitHub annotations for failures/warnings/errors. | `true` |
 | `diagnostics` | Opt in to a best-effort redacted diagnostics log bundle when Canary cannot produce a usable report. Strictly opt-in: the artifact is downloadable by anyone who can read the repository, and the process environment is never included. | `false` |
 | `allow-empty` | Let a run that executes no checks pass (`--allow-empty`). Only meaningful with `version: 0.2.0` or newer, which fail such a run by default; older versions already pass it, so the flag is not forwarded to them. | `false` |
@@ -537,7 +543,7 @@ artifact name actually used (including any fallback suffix), and
 `steps.<id>.outputs.artifact-id` to get the artifact ID (which is also linked
 directly in the job summary when available).
 
-Retention of the report artifact can be configured using `report-retention-days`
+Retention of the report and receipt artifacts can be configured using `report-retention-days`
 (an integer between 1 and 90). When omitted, the repository's default artifact
 retention applies.
 
@@ -545,10 +551,14 @@ retention applies.
 
 Engine [v0.2.0](https://github.com/StellarCanary/Protocol-Canary/releases/tag/v0.2.0)
 publishes the binary `stellar-canary-linux-x86_64` and `SHA256SUMS`.
-The Action's prebuilt installer expects an archive for the requested
-platform; a raw binary release alone does not make that archive path
-available. When no usable prebuilt archive exists, the Action installs
-with `cargo install --git`, pinned to the immutable commit the requested version's tag
+The Action's prebuilt installer expects a release archive for the runner's
+target (`stellar-canary-<version>-<target>.tar.gz`) and a checksum-manifest
+entry for the exact platform binary name; a raw binary release alone does not
+make that archive path available, and no prebuilt is promised for an
+unsupported platform or a release that does not publish one. The prebuilt
+download follows no redirects, and a checksum proves integrity only, not the
+release author's identity. When no usable prebuilt exists, the Action installs
+with `cargo install --git` (unless `strict-integrity: true`), pinned to the immutable commit the requested version's tag
 resolved to at run time (falling back to the tag itself, with a warning, if
 that resolution fails) — see `src/version.ts` and `src/canary.ts`. This
 requires a Rust/Cargo toolchain on the runner; GitHub-hosted Ubuntu

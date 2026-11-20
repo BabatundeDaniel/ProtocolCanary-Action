@@ -8,8 +8,19 @@
 import type { URL } from "node:url";
 import { isExactGithubApiUrl, parseSafeHttpsUrl } from "./safe-url";
 
+/**
+ * Candidate maximum number of redirect hops. Documentation of a proposed
+ * limit only: runtime redirect following stays blocked (D-11) and no download
+ * path follows redirects, so this is not an active setting.
+ */
 export const MAX_REDIRECT_HOPS = 3;
 
+/**
+ * Candidate exact-match hostname allow-list for redirect sources and targets,
+ * based on observed release download hosts (see docs/download-policy.md).
+ * Not enforced at runtime: redirects are still rejected outright (D-11), so
+ * listing a host here does not authorise following a redirect to it.
+ */
 export const ALLOWED_REDIRECT_HOSTS = Object.freeze([
   "github.com",
   "release-assets.githubusercontent.com",
@@ -19,14 +30,23 @@ const OBSERVED_REDIRECTS = Object.freeze([
   Object.freeze({ from: "github.com", to: "release-assets.githubusercontent.com" }),
 ]);
 
+/** Union of the hostnames in {@link ALLOWED_REDIRECT_HOSTS}. Candidate policy only. */
 export type AllowedRedirectHost = (typeof ALLOWED_REDIRECT_HOSTS)[number];
 
+/**
+ * Verdict from the candidate policy checks. A result of `allowed: true` is
+ * advisory and does not cause any redirect to be followed at runtime.
+ */
 export interface RedirectHopEvaluation {
+  /** Whether the candidate policy would accept the URL or hop. */
   allowed: boolean;
+  /** `"allowed"` on acceptance, otherwise a human-readable rejection reason. */
   reason: string;
 }
 
+/** Options for {@link getHeadersForUrl}. */
 export interface HeadersForUrlOptions {
+  /** Optional bearer token, attached only for an exact `api.github.com` URL. */
   token?: string | undefined;
 }
 
