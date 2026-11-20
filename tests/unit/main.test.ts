@@ -1,4 +1,5 @@
 import type * as actionsCore from "@actions/core";
+import type * as nodeFs from "node:fs";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -33,6 +34,7 @@ const {
   uploadReceiptMock,
   uploadReportMock,
   renderJUnitReportMock,
+  receiptWriteFailure,
 } = vi.hoisted(() => ({
   getInputsMock: vi.fn<() => ActionInputs>(),
   ensureCanaryInstalledMock: vi.fn(),
@@ -52,7 +54,21 @@ const {
   uploadReceiptMock: vi.fn(),
   uploadReportMock: vi.fn(),
   renderJUnitReportMock: vi.fn(),
+  receiptWriteFailure: { enabled: false },
 }));
+
+// #573: fail only writes to the receipt path; every other write (including the
+// report) reaches the real filesystem.
+vi.mock("node:fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof nodeFs>();
+  const writeFileSync = ((file: unknown, ...rest: unknown[]) => {
+    if (receiptWriteFailure.enabled && String(file).includes("stellar-canary-receipt-")) {
+      throw new Error("EACCES: receipt denied");
+    }
+    return (actual.writeFileSync as (...args: unknown[]) => void)(file, ...rest);
+  }) as typeof actual.writeFileSync;
+  return { ...actual, writeFileSync, default: { ...actual, writeFileSync } };
+});
 
 vi.mock("@actions/core", async (importOriginal) => {
   const actual = await importOriginal<typeof actionsCore>();
@@ -707,6 +723,25 @@ describe("run", () => {
     expect(setFailedMock).not.toHaveBeenCalled();
     expect(setOutputMock).toHaveBeenCalledWith("status", "pass");
     expect(setOutputMock).toHaveBeenCalledWith("receipt-path", expect.any(String));
+  });
+
+  // #573: a receipt write failure is auxiliary — the engine result is kept.
+  it("preserves the engine result when the receipt file cannot be written (#573)", async () => {
+    getInputsMock.mockReturnValue({ ...INPUTS, generateReceipt: true });
+    runCheckMock.mockResolvedValueOnce({ exitCode: 0, signal: null, stdout: JSON.stringify(PASS_REPORT), stderr: "" });
+    receiptWriteFailure.enabled = true;
+    try {
+      await run();
+    } finally {
+      receiptWriteFailure.enabled = false;
+    }
+
+    expect(setFailedMock).not.toHaveBeenCalled();
+    expect(setOutputMock).toHaveBeenCalledWith("status", "pass");
+    expect(warningMock.mock.calls.flat().join(" ")).toContain("Failed to write the Execution Receipt: EACCES: receipt denied");
+    expect(setOutputMock).not.toHaveBeenCalledWith("receipt-path", expect.anything());
+    expect(uploadReceiptMock).not.toHaveBeenCalled();
+    expect(fs.readdirSync(runnerTemp).some((name) => name.startsWith("stellar-canary-receipt-"))).toBe(false);
   });
 
   // #362: no report, no receipt — the execution-failure path returns before
