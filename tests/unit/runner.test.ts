@@ -235,7 +235,8 @@ describe("buildCheckArgs", () => {
   });
 
   it("forwards fail-on-warning and offline only when enabled and supported", () => {
-    const supportedVersion = "999999999.0.0";
+    infoMock.mockClear();
+    const supportedVersion = "0.3.0";
     const baseArgs = buildCheckArgs(BASE_INPUTS);
 
     expect(
@@ -251,13 +252,18 @@ describe("buildCheckArgs", () => {
         supportedVersion,
       ),
     ).toEqual([...baseArgs, "--fail-on-warning", "--offline"]);
-    for (const unsupportedVersion of [undefined, "0.2.0", "not-a-version"]) {
-      expect(
-        buildCheckArgs(
-          { ...BASE_INPUTS, failOnWarning: true, offline: true },
-          unsupportedVersion,
-        ),
-      ).toEqual(baseArgs);
+    for (const unsupportedVersion of [undefined, "0.1.1", "0.2.0", "0.2.9", "not-a-version"]) {
+      const args = buildCheckArgs(
+        { ...BASE_INPUTS, failOnWarning: true, offline: true },
+        unsupportedVersion,
+      );
+      expect(args).toEqual(baseArgs);
+      const notes = infoMock.mock.calls.map((call) => String(call[0]));
+      expect(notes).toHaveLength(2);
+      for (const input of ["fail-on-warning", "offline"]) {
+        expect(notes.some((note) => note.includes(`"${input}"`) && note.includes("0.3.0"))).toBe(true);
+      }
+      infoMock.mockClear();
     }
   });
 
@@ -604,18 +610,18 @@ describe("the five inputs main gated separately are table-driven now (#413)", ()
       patch: { failOnWarning: true },
       flag: "--fail-on-warning",
       value: undefined,
-      minVersion: "999999999.0.0",
-      supported: "999999999.0.0",
-      older: "0.3.0",
+      minVersion: "0.3.0",
+      supported: "0.3.0",
+      older: "0.2.9",
     },
     {
       input: "offline",
       patch: { offline: true },
       flag: "--offline",
       value: undefined,
-      minVersion: "999999999.0.0",
-      supported: "999999999.0.0",
-      older: "0.3.0",
+      minVersion: "0.3.0",
+      supported: "0.3.0",
+      older: "0.2.9",
     },
   ];
 

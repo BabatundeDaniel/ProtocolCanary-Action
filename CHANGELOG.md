@@ -23,7 +23,7 @@ All notable changes to this project are documented in this file.
   engine declares the two flags conflicting (`no-cache: false` with a TTL
   is accepted) ([#413]). The same table now also declares `network-passphrase`,
   `rpc-max-retries` and `rpc-retry-delay-ms` (first engine release 0.3.0) plus
-  `fail-on-warning` and `offline` (main's placeholder release, 999999999.0.0),
+  `fail-on-warning` and `offline` (first supported release 0.3.0),
   so main's separate `engineSupports*` helpers and the `ignoredInputs` warning
   are gone: every input skipped for an older engine is reported by a `core.info`
   note in `buildCheckArgs` naming the input and the required version.
