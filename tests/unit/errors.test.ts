@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  CanaryNotFoundError,
   ChecksumMismatchError,
   ConfigNotFoundError,
+  InstallationFailedError,
+  SummaryPublishFailedError,
   TimeoutError,
   CanaryExecutionFailedError,
   InvalidReportError,
@@ -36,6 +39,39 @@ describe("CanaryActionError hierarchy", () => {
 
   it("sets the ChecksumMismatchError code", () => {
     expect(new ChecksumMismatchError("boom").code).toBe("ChecksumMismatch");
+  });
+
+  it("names CanaryNotFoundError and sets its code", () => {
+    const error = new CanaryNotFoundError("no binary found");
+    expect(error.name).toBe("CanaryNotFoundError");
+    expect(error.code).toBe("CanaryNotFound");
+    expect(error.message).toBe("no binary found");
+    expect(isCanaryActionError(error)).toBe(true);
+  });
+
+  it("names InstallationFailedError, sets its code, and preserves its diagnostic", () => {
+    const withDiagnostic = new InstallationFailedError("install failed", "cargo exited 1");
+    expect(withDiagnostic.name).toBe("InstallationFailedError");
+    expect(withDiagnostic.code).toBe("InstallationFailed");
+    expect(withDiagnostic.message).toBe("install failed");
+    expect(withDiagnostic.diagnostic).toBe("cargo exited 1");
+    expect(isCanaryActionError(withDiagnostic)).toBe(true);
+  });
+
+  it("leaves the InstallationFailedError diagnostic undefined when absent", () => {
+    const error = new InstallationFailedError("install failed");
+    expect(error.name).toBe("InstallationFailedError");
+    expect(error.code).toBe("InstallationFailed");
+    expect(error.diagnostic).toBeUndefined();
+    expect(isCanaryActionError(error)).toBe(true);
+  });
+
+  it("names SummaryPublishFailedError and sets its code", () => {
+    const error = new SummaryPublishFailedError("summary write failed");
+    expect(error.name).toBe("SummaryPublishFailedError");
+    expect(error.code).toBe("SummaryPublishFailed");
+    expect(error.message).toBe("summary write failed");
+    expect(isCanaryActionError(error)).toBe(true);
   });
 
   it("names itself after its class so annotations and failures stay greppable", () => {
