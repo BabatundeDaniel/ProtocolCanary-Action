@@ -438,6 +438,21 @@ describe("test-reusable-workflow conformance (#370)", () => {
     expect(fs.existsSync(parentDir)).toBe(false);
     expect(tracker.has(parentDir)).toBe(false);
   });
+
+  it("verifies permissions: contents: read and absence of write permissions in reusable-canary-check.yml (#609)", () => {
+    const reusableSource = fs.readFileSync(REUSABLE_PATH, "utf8").replace(/\r\n/g, "\n");
+    expect(reusableSource).toMatch(/^permissions:\s*\n\s+contents:\s*read/m);
+
+    const scopes = [...reusableSource.matchAll(/^\s*([a-zA-Z_-]+):\s*(write|read|none)/gm)];
+    expect(scopes.length, "must declare permissions").toBeGreaterThan(0);
+    for (const match of scopes) {
+      const scope = match[1];
+      const permission = match[2];
+      expect(permission, `Permission scope '${scope}' cannot be '${permission}', only 'read' or 'none' allowed`).not.toBe("write");
+    }
+
+    expect(reusableSource).not.toMatch(/:\s*write\b/);
+  });
 });
 
 function stageUnpackedFixture(): string {
