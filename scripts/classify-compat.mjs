@@ -39,7 +39,7 @@
  * @typedef {Object} ExpectationEntry
  * @property {string} engineRef - Engine reference this expectation applies to.
  * @property {string} packRef - Fixture pack reference this expectation applies to.
- * @property {"fail"|"error"|"execution-failed"} expectedStatus - Expected Action status.
+ * @property {"fail"|"error"|"execution-failed"|"warning"} expectedStatus - Expected Action status.
  * @property {string} failureSignature - First line of diagnostic that identifies this failure.
  * @property {string} runUrl - URL of the run that produced this expectation (evidence).
  * @property {string} dateAdded - Date the expectation was added (ISO 8601).
