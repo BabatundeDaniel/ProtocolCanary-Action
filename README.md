@@ -815,6 +815,8 @@ The Action's integrity guarantees, trust boundaries, and `strict-integrity` fail
 
 [Apache-2.0](LICENSE)
 
+The license and NOTICE texts shipped by third-party code bundled into the Action are reproduced in [`THIRD_PARTY_NOTICES.txt`](THIRD_PARTY_NOTICES.txt), alongside the linked esbuild notices in [`dist/index.js.LEGAL.txt`](dist/index.js.LEGAL.txt).
+
 
 ### Optional pull request comment (experimental)
 

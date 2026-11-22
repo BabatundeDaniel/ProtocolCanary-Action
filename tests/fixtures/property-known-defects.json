@@ -1,0 +1,16 @@
+[
+  {
+    "property": "redactIdempotence",
+    "input": "`",
+    "observed": "\\\\`",
+    "expected": "redact(redact(input)) === redact(input)",
+    "issue": "https://github.com/StellarCanary/ProtocolCanary-Action/issues/637"
+  },
+  {
+    "property": "redactIdempotence",
+    "input": ":::",
+    "observed": "\\:\\\\:\\:",
+    "expected": "redact(redact(input)) === redact(input)",
+    "issue": "https://github.com/StellarCanary/ProtocolCanary-Action/issues/698"
+  }
+]

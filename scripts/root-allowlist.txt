@@ -22,6 +22,7 @@ package-lock.json
 package.json
 README.md
 SECURITY.md
+THIRD_PARTY_NOTICES.txt
 stryker.config.json
 tsconfig.json
 vitest.config.ts
