@@ -46,6 +46,46 @@ describe("sanitizeLogText", () => {
     expect(sanitized).toBe("Error: compilation failed");
   });
 
+  it("strips BEL-terminated OSC 8 hyperlinks and keeps the link text", () => {
+    const raw = "before \x1B]8;;https://example.com/docs?token=synthetic123\x07link text\x1B]8;;\x07 after";
+    const sanitized = sanitizeLogText(raw);
+
+    expect(sanitized).toBe("before link text after");
+    expect(sanitized).not.toContain("example.com");
+    expect(sanitized).not.toContain("\x1B");
+    expect(sanitized).not.toContain("\x07");
+    expect(sanitized).not.toContain("8;;");
+  });
+
+  it("strips ST-terminated OSC 8 hyperlinks with parameters", () => {
+    const raw = "A \x1B]8;id=ref;https://example.com/a?x=1\x1B\\shown\x1B]8;;\x1B\\ B";
+    const sanitized = sanitizeLogText(raw);
+
+    expect(sanitized).toBe("A shown B");
+    expect(sanitized).not.toContain("\x1B");
+    expect(sanitized).not.toContain("8;id=ref");
+  });
+
+  it("strips OSC 8 hyperlinks whose URL spans a newline without dropping later lines", () => {
+    const raw = "start \x1B]8;;https://example.com/\nlong/path\x07link\x1B]8;;\x07 end\nnext line";
+    const sanitized = sanitizeLogText(raw);
+
+    expect(sanitized).toBe("start link end\nnext line");
+  });
+
+  it("strips an unterminated OSC 8 opening sequence without leaving control artifacts", () => {
+    const sanitized = sanitizeLogText("before \x1B]8;;https://example.com/docs");
+    expect(sanitized).toBe("before ");
+  });
+
+  it("strips many OSC 8 sequences without unbounded regex backtracking", () => {
+    const raw = "\x1B]8;;https://example.com/x\x07link\x1B]8;;\x07".repeat(2000);
+    const unterminated = "\x1B]8;;https://example.com/x".repeat(2000);
+
+    expect(sanitizeLogText(raw)).toBe("link".repeat(2000));
+    expect(sanitizeLogText(unterminated)).toBe("");
+  });
+
   it("removes control characters and carriage returns while preserving newlines and tabs", () => {
     const raw = "Line 1\r\n\tTabbed\x00with\x07bell\x1Funit\nLine 2\r\n";
     const sanitized = sanitizeLogText(raw);
