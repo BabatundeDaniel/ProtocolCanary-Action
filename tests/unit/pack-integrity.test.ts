@@ -7,6 +7,7 @@ import * as path from "node:path";
 import { ChecksumMismatchError } from "../../src/errors";
 
 const TEST_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "canary-pack-test-"));
+const extraDirs: string[] = [];
 
 beforeEach(() => {
   // Clean up test directory before each test
@@ -16,6 +17,14 @@ beforeEach(() => {
 
 afterEach(() => {
   fs.rmSync(TEST_DIR, { recursive: true, force: true });
+  for (const dir of extraDirs) {
+    try {
+      fs.rmSync(dir, { recursive: true, force: true });
+    } catch {
+      // ignore
+    }
+  }
+  extraDirs.length = 0;
 });
 
 function writeFile(content: string, relPath: string): void {
@@ -67,6 +76,51 @@ describe("computePackDigest", () => {
 
   it("returns sha256: with empty directory", () => {
     const digest = computePackDigest(TEST_DIR);
+    expect(digest).toMatch(/^sha256:[0-9a-f]{64}$/);
+  });
+
+  it("produces identical hashes regardless of directory insertion order across nested subdirectories (#612)", () => {
+    const dir1 = fs.mkdtempSync(path.join(os.tmpdir(), "canary-nest-1-"));
+    const dir2 = fs.mkdtempSync(path.join(os.tmpdir(), "canary-nest-2-"));
+    extraDirs.push(dir1, dir2);
+
+    // Insertion order A
+    fs.mkdirSync(path.join(dir1, "sub1", "nested"), { recursive: true });
+    fs.mkdirSync(path.join(dir1, "sub2"), { recursive: true });
+    fs.writeFileSync(path.join(dir1, "sub1", "nested", "fileA.txt"), "hello");
+    fs.writeFileSync(path.join(dir1, "sub2", "fileB.txt"), "world");
+    fs.writeFileSync(path.join(dir1, "root.txt"), "root content");
+
+    // Reversed insertion order B
+    fs.mkdirSync(path.join(dir2, "sub2"), { recursive: true });
+    fs.mkdirSync(path.join(dir2, "sub1", "nested"), { recursive: true });
+    fs.writeFileSync(path.join(dir2, "root.txt"), "root content");
+    fs.writeFileSync(path.join(dir2, "sub2", "fileB.txt"), "world");
+    fs.writeFileSync(path.join(dir2, "sub1", "nested", "fileA.txt"), "hello");
+
+    const digest1 = computePackDigest(dir1);
+    const digest2 = computePackDigest(dir2);
+    expect(digest1).toBe(digest2);
+  });
+
+  it("verifies deterministic path sorting for files in deeply nested folder hierarchies (#612)", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "canary-deep-"));
+    extraDirs.push(dir);
+
+    const paths = [
+      path.join("a", "b", "c", "d", "e.txt"),
+      path.join("a", "b", "z.txt"),
+      path.join("a", "a.txt"),
+      path.join("b", "c.txt"),
+    ];
+    for (const rel of paths) {
+      const full = path.join(dir, rel);
+      fs.mkdirSync(path.dirname(full), { recursive: true });
+      fs.writeFileSync(full, `content of ${rel}`);
+    }
+
+    const digest = computePackDigest(dir);
+    expect(isCanonicalPackDigest(digest)).toBe(true);
     expect(digest).toMatch(/^sha256:[0-9a-f]{64}$/);
   });
 });

@@ -110,4 +110,30 @@ describe("weekly Testnet P30 identity and Futurenet P29 live checks", () => {
       issues: "write",
     });
   });
+
+  it("validates matrix protocol pins, fixture labels and network passphrases (#613)", () => {
+    const matrix = workflow.jobs?.["live-check"]?.strategy?.matrix?.include ?? [];
+    expect(matrix.length).toBeGreaterThan(0);
+    const SHA_REGEX = /^[0-9a-f]{40}$/i;
+
+    for (const entry of matrix) {
+      expect(
+        SHA_REGEX.test(entry.fixtures_commit),
+        `matrix entry ${entry.network} has invalid commit SHA: ${entry.fixtures_commit}`,
+      ).toBe(true);
+      expect(typeof entry.fixtures_label).toBe("string");
+      expect(
+        entry.fixtures_label.length,
+        `matrix entry ${entry.network} must have non-empty fixtures_label`,
+      ).toBeGreaterThan(0);
+      expect(
+        typeof entry.passphrase,
+        `matrix entry ${entry.network} must have string passphrase`,
+      ).toBe("string");
+      expect(
+        entry.passphrase.trim().length,
+        `matrix entry ${entry.network} must have non-empty passphrase`,
+      ).toBeGreaterThan(0);
+    }
+  });
 });
