@@ -400,7 +400,7 @@ function loadExpectations(value) {
       !isObject(expectation) ||
       !nonEmptyString(expectation.engineRef) ||
       !nonEmptyString(expectation.packRef) ||
-      !["fail", "error", "execution-failed"].includes(expectation.expectedStatus) ||
+      !["fail", "error", "execution-failed", "warning"].includes(expectation.expectedStatus) ||
       !nonEmptyString(expectation.failureSignature) ||
       !nonEmptyString(expectation.runUrl) ||
       !nonEmptyString(expectation.dateAdded) ||
