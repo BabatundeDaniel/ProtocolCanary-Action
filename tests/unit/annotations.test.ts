@@ -186,4 +186,32 @@ describe("emitExitFailureAnnotation", () => {
     expect(properties?.file).toBeUndefined();
     expect(properties?.startLine).toBeUndefined();
   });
+
+  it("formats exit code 6 with the unrecognized exit code fallback (#587)", () => {
+    emitExitFailureAnnotation(6, "verification failed: checksum mismatch");
+    expect(errorMock).toHaveBeenCalledTimes(1);
+    const message = String(errorMock.mock.calls[0]?.[0]);
+    expect(message).toContain("exit code 6");
+    expect(message).toContain("Unrecognized exit code 6.");
+    expect(message).toContain("verification failed: checksum mismatch");
+  });
+
+  it("formats a negative exit code with the fallback description and retains diagnostics (#587)", () => {
+    emitExitFailureAnnotation(-1, "process terminated by signal SIGKILL");
+    expect(errorMock).toHaveBeenCalledTimes(1);
+    const message = String(errorMock.mock.calls[0]?.[0]);
+    expect(message).toContain("exit code -1");
+    expect(message).toContain("Unrecognized exit code -1.");
+    expect(message).toContain("Engine diagnostic: process terminated by signal SIGKILL");
+  });
+
+  it.each([6, -1, 127])("keeps the workflow title and omits file/line for unmapped exit code %i (#587)", (code) => {
+    emitExitFailureAnnotation(code, "engine diagnostic");
+    expect(errorMock).toHaveBeenCalledTimes(1);
+    expect(errorMock.mock.calls[0]?.[1]).toMatchObject({ title: "Stellar Protocol Canary" });
+    const properties = errorMock.mock.calls[0]?.[1] as AnnotationProperties | undefined;
+    expect(properties?.file).toBeUndefined();
+    expect(properties?.startLine).toBeUndefined();
+    expect(properties?.endLine).toBeUndefined();
+  });
 });

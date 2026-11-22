@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
-export const DEFAULT_ENGINE_REFS = Object.freeze(["v0.1.1", "v0.2.0"]);
+export const DEFAULT_ENGINE_REFS = Object.freeze(["v0.1.1", "v0.2.0", "v0.3.0"]);
 export const DEFAULT_PACK_REFS = Object.freeze(["protocol-28", "main"]);
 export const MAX_MATRIX_CELLS = 256;
 export const MAX_REFERENCE_LENGTH = 255;
