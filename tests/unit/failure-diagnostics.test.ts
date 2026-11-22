@@ -7,7 +7,7 @@ vi.mock("@actions/core", async (importOriginal) => ({
   error: errorMock,
 }));
 import { emitExecutionFailureAnnotation, emitExitFailureAnnotation } from "../../src/annotations";
-import { TRUNCATION_NOTICE } from "../../src/log-block";
+import { formatSafeDiagnosticTail, TRUNCATION_NOTICE } from "../../src/log-block";
 import { extractDiagnostic } from "../../src/runner";
 import { renderExecutionFailureMarkdown } from "../../src/summary";
 
@@ -45,6 +45,26 @@ describe.each(Object.entries(sinks))("safe failure diagnostic: %s", (_name, sink
     expect(output).not.toContain("�");
   });
 
+  it.each([
+    { label: "2-byte", character: "é", bytes: 2 },
+    { label: "3-byte", character: "€", bytes: 3 },
+    { label: "4-byte", character: "🚀", bytes: 4 },
+  ])("bounds $label UTF-8 sequences without slicing them", ({ character, bytes }) => {
+    for (let prefixLength = 0; prefixLength < bytes; prefixLength++) {
+      const output = sink("x".repeat(prefixLength) + character.repeat(5000));
+      const retained = output.slice(TRUNCATION_NOTICE.length);
+      const outputBytes = Buffer.byteLength(output);
+
+      expect(output.startsWith(TRUNCATION_NOTICE)).toBe(true);
+      expect(output).not.toContain("\uFFFD");
+      expect(outputBytes).toBeLessThanOrEqual(8192);
+      expect(outputBytes).toBeGreaterThan(8192 - Buffer.byteLength(TRUNCATION_NOTICE) - bytes);
+      expect((outputBytes - Buffer.byteLength(TRUNCATION_NOTICE)) % bytes).toBe(0);
+      expect(Array.from(retained).every((codePoint) => codePoint === character)).toBe(true);
+      expect(retained.endsWith(character)).toBe(true);
+    }
+  });
+
   it("redacts before byte and line cuts, including multiline environment values", () => {
     const token = "ghp_" + "b".repeat(36);
     const multiline = "first-secret-half\nsecond-secret-half";
@@ -68,6 +88,18 @@ describe.each(Object.entries(sinks))("safe failure diagnostic: %s", (_name, sink
       expect(sink(text)).toBe(text);
     }
   });
+});
+
+it("keeps mixed 3-byte and 4-byte sequences intact at the 8 KiB diagnostic cut", () => {
+  const output = formatSafeDiagnosticTail("€".repeat(3000) + "🚀".repeat(1000));
+  const retained = output.slice(TRUNCATION_NOTICE.length);
+
+  expect(output.startsWith(TRUNCATION_NOTICE)).toBe(true);
+  expect(output).not.toContain("\uFFFD");
+  expect(Buffer.byteLength(output)).toBeLessThanOrEqual(8192);
+  expect(Array.from(retained).every((codePoint) => codePoint === "€" || codePoint === "🚀")).toBe(true);
+  expect(retained).toContain("€");
+  expect(retained).toContain("🚀");
 });
 
 it("redacts before root-line selection and the 500-byte extraction cut", () => {
