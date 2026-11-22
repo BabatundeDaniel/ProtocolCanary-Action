@@ -42,7 +42,7 @@ export interface CellFacts {
 export interface ExpectationEntry {
   engineRef: string;
   packRef: string;
-  expectedStatus: "fail" | "error" | "execution-failed";
+  expectedStatus: "fail" | "error" | "execution-failed" | "warning";
   failureSignature: string;
   runUrl: string;
   dateAdded: string;

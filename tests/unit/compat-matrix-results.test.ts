@@ -343,6 +343,24 @@ describe("compatibility matrix cell evidence", () => {
     expect(timeoutResult.hasFailures).toBe(true);
   });
 
+  it("loads warning expectations and evaluates them for matrix cells", () => {
+    const artifactRoot = temporaryDirectory();
+    createArtifact(artifactRoot, onlyCell(), { report: report() });
+    const expectations = [{
+      engineRef: "v0.1.1",
+      packRef: "protocol-28",
+      expectedStatus: "warning" as const,
+      failureSignature: "Deprecated API",
+      runUrl: "https://example.com/expected-warning",
+      dateAdded: "2026-01-01",
+      reason: "Deprecated API is used by this fixture pack",
+    }];
+
+    const result = collect(artifactRoot, { expectations });
+    expect(result.cells[0]!.classification).toBe("unexpected-pass");
+    expect(result.cells[0]!.reason).toContain("Expected warning");
+  });
+
   it("records zero-check reports as skipped rather than supported", () => {
     const artifactRoot = temporaryDirectory();
     createArtifact(artifactRoot, onlyCell(), { report: report("pass", true) });
