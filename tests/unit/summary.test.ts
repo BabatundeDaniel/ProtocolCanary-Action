@@ -967,13 +967,42 @@ describe("renderSummaryMarkdown — reproduction command (#416)", () => {
     expect(markdown).toContain("--config '$WEIRD;value'");
   });
 
-  it("masks credentials in the --rpc-url argument", () => {
+  it("masks and shell-quotes credentials in the two-argument --rpc-url form", () => {
     const markdown = renderSummaryMarkdown(report({ status: "pass" }), {
       engineArgs: ["check", "--rpc-url", "https://user:pass@example.com/rpc?token=secret"],
     });
 
-    expect(markdown).toContain("--rpc-url https://[REDACTED]@example.com/rpc[REDACTED]");
+    expect(markdown).toContain("--rpc-url 'https://[REDACTED]@example.com/rpc[REDACTED]'");
     expect(markdown).not.toContain("user:pass");
+    expect(markdown).not.toContain("token=secret");
+  });
+
+  it("masks credentials in the single-argument --rpc-url=<url> form (#582)", () => {
+    const markdown = renderSummaryMarkdown(report({ status: "pass" }), {
+      engineArgs: ["check", "--rpc-url=https://user:pass@example.com/rpc?token=secret"],
+    });
+
+    expect(markdown).toContain("'--rpc-url=https://[REDACTED]@example.com/rpc[REDACTED]'");
+    expect(markdown).not.toContain("user:pass");
+    expect(markdown).not.toContain("token=secret");
+  });
+
+  it("shell-quotes a masked RPC URL whose query string contains ampersands (#582)", () => {
+    const markdown = renderSummaryMarkdown(report({ status: "pass" }), {
+      engineArgs: ["check", "--rpc-url", "https://example.com/rpc?key=public&token=secret&page=1"],
+    });
+
+    expect(markdown).toContain("--rpc-url 'https://example.com/rpc[REDACTED]'");
+    expect(markdown).not.toContain("token=secret");
+    expect(markdown).not.toContain("key=public");
+  });
+
+  it("quotes an ampersand that survives masking in a single-argument RPC URL (#582)", () => {
+    const markdown = renderSummaryMarkdown(report({ status: "pass" }), {
+      engineArgs: ["check", "--rpc-url=https://example.com/a&b?token=secret"],
+    });
+
+    expect(markdown).toContain("'--rpc-url=https://example.com/a&b[REDACTED]'");
     expect(markdown).not.toContain("token=secret");
   });
 

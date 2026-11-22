@@ -439,8 +439,15 @@ function buildCommandString(args: readonly string[]): string {
     const nextArg = args[i + 1];
 
     if (arg === "--rpc-url" && nextArg !== undefined) {
-      parts.push(arg, maskRpcUrl(nextArg));
+      parts.push(quoteForShell(arg), quoteForShell(maskRpcUrl(nextArg)));
       i += 2;
+      continue;
+    }
+
+    if (arg.startsWith("--rpc-url=")) {
+      const masked = `--rpc-url=${maskRpcUrl(arg.slice("--rpc-url=".length))}`;
+      parts.push(quoteForShell(masked));
+      i++;
       continue;
     }
 
