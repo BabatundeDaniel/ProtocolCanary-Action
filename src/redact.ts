@@ -42,7 +42,7 @@ const STELLAR_SEED_PATTERN = /\bS[A-Z2-7]{55}\b/g;
  * false positive only hides a harmless string, while a false negative leaks a
  * credential.
  */
-const SENSITIVE_ENV_NAME = /(TOKEN|SECRET|KEY|PASSWORD)/i;
+const SENSITIVE_ENV_NAME = /(TOKEN|SECRET|KEY|PASSWORD|PASSWD|PASSPHRASE|AUTH|CREDENTIAL)/i;
 
 /** Values shorter than this are skipped: masking a two-character value would
  * mangle unrelated text without protecting a realistic secret. */
@@ -59,7 +59,8 @@ function escapeRegExp(value: string): string {
 
 /**
  * Masks the values of environment variables whose names contain `TOKEN`,
- * `SECRET`, `KEY` or `PASSWORD`. Empty and very short values are ignored so a
+ * `SECRET`, `KEY`, `PASSWORD`, `PASSWD`, `PASSPHRASE`, `AUTH` or `CREDENTIAL`.
+ * Empty and very short values are ignored so a
  * trivially common string cannot rewrite the whole log. This reads the values
  * only to build search patterns; it never includes the ambient environment in
  * the returned text.

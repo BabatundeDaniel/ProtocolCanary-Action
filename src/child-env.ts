@@ -123,12 +123,16 @@ export const ALLOWED_ENV_PREFIXES: readonly string[] = ["LC_", "RUSTUP_", "CARGO
  * Exact names never passed to a child, even when a prefix above would match.
  *
  * - `CARGO_REGISTRY_TOKEN` and the `CARGO_REGISTRIES_*` family below hold
- *   crates.io / mirror credentials.
+ *   crates.io / mirror credentials, as does
+ *   `CARGO_REGISTRY_CREDENTIAL_PROVIDER` (an external credential helper).
+ * - `DOCKER_AUTH_CONFIG` holds container registry credentials.
  * - `GIT_ASKPASS` and `SSH_AUTH_SOCK` hand a child live credential agents.
  * - `NODE_AUTH_TOKEN` is the npm equivalent of a registry token.
  */
 export const DENIED_ENV_NAMES: readonly string[] = [
   "CARGO_REGISTRY_TOKEN",
+  "CARGO_REGISTRY_CREDENTIAL_PROVIDER",
+  "DOCKER_AUTH_CONFIG",
   "GIT_ASKPASS",
   "SSH_AUTH_SOCK",
   "NODE_AUTH_TOKEN",

@@ -175,13 +175,9 @@ const ALLOW_EMPTY_FLAG: VersionGatedFlag = {
  * older engine and logs the skip note instead. */
 const NETWORK_PASSPHRASE_AND_RPC_RETRIES_MIN_VERSION: readonly [number, number, number] = [0, 3, 0];
 
-/** Placeholder first release for `--fail-on-warning` and `--offline`: no
- * released Protocol-Canary accepts these flags yet, so the value changes
- * only when Protocol-Canary publishes the release containing PRs #567 and
- * #527. */
-// TODO(#421): Replace this placeholder when Protocol-Canary publishes the
-// release containing PRs #567 and #527.
-const FAIL_ON_WARNING_AND_OFFLINE_MIN_VERSION: readonly [number, number, number] = [999_999_999, 0, 0];
+/** The first Protocol-Canary release whose `check` accepts `--fail-on-warning`
+ * and `--offline` (#578; upstream PRs #567 and #527): v0.3.0. */
+const FAIL_ON_WARNING_AND_OFFLINE_MIN_VERSION: readonly [number, number, number] = [0, 3, 0];
 
 const NETWORK_PASSPHRASE_FLAG: VersionGatedFlag = {
   input: "network-passphrase",

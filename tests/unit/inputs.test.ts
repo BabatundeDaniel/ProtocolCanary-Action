@@ -638,19 +638,21 @@ describe("getInputs", () => {
     expect(warningMock).not.toHaveBeenCalled();
 
     // The default `version` (0.2.0) cannot honour either flag: both stay out
-    // of argv, and each gets a core.info note naming the input and the
-    // placeholder release that would accept it.
+    // of argv, and each gets a core.info note naming the input and the first
+    // release that accepts it.
     const gated = buildCheckArgs(inputs, "0.2.0");
     expect(gated).not.toContain("--fail-on-warning");
     expect(gated).not.toContain("--offline");
     const notes = infoMock.mock.calls.map((call) => String(call[0]));
     for (const input of ["fail-on-warning", "offline"]) {
-      expect(notes.some((note) => note.includes(`"${input}"`) && note.includes("999999999.0.0"))).toBe(true);
+      expect(notes.some((note) => note.includes(`"${input}"`) && note.includes("0.3.0"))).toBe(true);
     }
 
-    // Once an engine reaches the placeholder release, both are forwarded.
-    const supported = buildCheckArgs(getInputs(), "999999999.0.0");
-    expect(supported).toEqual(expect.arrayContaining(["--fail-on-warning", "--offline"]));
+    // Protocol-Canary 0.3.0 and newer forward both flags.
+    for (const version of ["0.3.0", "1.0.0"]) {
+      const supported = buildCheckArgs(getInputs(), version);
+      expect(supported).toEqual(expect.arrayContaining(["--fail-on-warning", "--offline"]));
+    }
   });
 
   // #361: `generate-receipt` opts a run into producing an Execution Receipt.

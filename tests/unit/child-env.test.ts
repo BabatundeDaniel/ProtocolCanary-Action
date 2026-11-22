@@ -112,6 +112,25 @@ describe("buildChildEnvironment: default allow-list", () => {
     expect(env).not.toHaveProperty("CARGO_REGISTRIES_FOO_TOKEN");
   });
 
+  it("removes Docker and Cargo credential-provider variables, including via passthrough", () => {
+    const source = {
+      PATH: "/usr/bin",
+      DOCKER_AUTH_CONFIG: '{"auths":{"registry.example.com":{"auth":"c2VjcmV0"}}}',
+      CARGO_REGISTRY_CREDENTIAL_PROVIDER: "/usr/bin/cargo-credential-helper",
+    };
+    const requested = ["DOCKER_AUTH_CONFIG", "CARGO_REGISTRY_CREDENTIAL_PROVIDER"];
+
+    expect(isDeniedEnvName("DOCKER_AUTH_CONFIG")).toBe(true);
+    expect(isDeniedEnvName("CARGO_REGISTRY_CREDENTIAL_PROVIDER")).toBe(true);
+
+    const { env, forwarded } = buildChildEnvironment(source, "linux", requested);
+
+    expect(env).toEqual({ PATH: "/usr/bin" });
+    expect(forwarded).toEqual([]);
+    expect(env).not.toHaveProperty("DOCKER_AUTH_CONFIG");
+    expect(env).not.toHaveProperty("CARGO_REGISTRY_CREDENTIAL_PROVIDER");
+  });
+
   it("removes any name containing a sensitive substring, whatever its prefix", () => {
     const source = {
       CARGO_SESSION_ID: "session",
@@ -284,7 +303,14 @@ describe("allow/deny constants", () => {
     ]) {
       expect(DENIED_ENV_PREFIXES).toContain(name);
     }
-    for (const name of ["CARGO_REGISTRY_TOKEN", "GIT_ASKPASS", "SSH_AUTH_SOCK", "NODE_AUTH_TOKEN"]) {
+    for (const name of [
+      "CARGO_REGISTRY_TOKEN",
+      "CARGO_REGISTRY_CREDENTIAL_PROVIDER",
+      "DOCKER_AUTH_CONFIG",
+      "GIT_ASKPASS",
+      "SSH_AUTH_SOCK",
+      "NODE_AUTH_TOKEN",
+    ]) {
       expect(DENIED_ENV_NAMES).toContain(name);
     }
     for (const substring of [
