@@ -117,6 +117,53 @@ describe("redactSecrets", () => {
   });
 });
 
+describe("expanded sensitive environment names (#583)", () => {
+  const names = [
+    "PROTOCOLCANARY_TEST_PASSPHRASE",
+    "PROTOCOLCANARY_TEST_PASSWD",
+    "PROTOCOLCANARY_TEST_AUTH",
+    "PROTOCOLCANARY_TEST_CREDENTIALS",
+  ];
+  const value = "expanded-pattern-value";
+
+  afterEach(() => {
+    for (const name of names) {
+      delete process.env[name];
+    }
+  });
+
+  it.each(names)("masks the value of %s", (name) => {
+    process.env[name] = value;
+    expect(redactSecrets(`debug: ${value}`)).toBe(`debug: ${REDACTED}`);
+  });
+
+  it("masks the values of real-world passphrase, auth and credential variables", () => {
+    const realNames = ["STELLAR_NETWORK_PASSPHRASE", "RPC_AUTH", "HTTP_BASIC_AUTH", "AWS_CREDENTIALS"];
+    try {
+      for (const name of realNames) {
+        process.env[name] = value;
+      }
+      expect(redactSecrets(`debug: ${value}`)).toBe(`debug: ${REDACTED}`);
+    } finally {
+      for (const name of realNames) {
+        delete process.env[name];
+      }
+    }
+  });
+
+  it("still ignores non-sensitive names and values below the minimum length", () => {
+    process.env.PROTOCOLCANARY_TEST_HARMLESS = value;
+    try {
+      expect(redactSecrets(`debug: ${value}`)).toBe(`debug: ${value}`);
+    } finally {
+      delete process.env.PROTOCOLCANARY_TEST_HARMLESS;
+    }
+
+    process.env.PROTOCOLCANARY_TEST_PASSPHRASE = "short";
+    expect(redactSecrets("debug: short")).toBe("debug: short");
+  });
+});
+
 describe("escapeWorkflowCommands", () => {
   it("neutralises workflow-command sequences", () => {
     const escaped = escapeWorkflowCommands("::error::compatibility failed");
