@@ -14,6 +14,7 @@ did not pass is listed as failing or as "not verified", never assumed.
 | 2026-10-20 | `ba9a8b5` (branch `feat/436-439-batch`) | 0.2.0 (`v0.2.0`) | built from source | tiny generated packs (moved into `tests/integration/real-engine-exit-codes.test.ts`) | the new exit-code/skip suite (issue #438): exits 1, 3, 4, two-invalid-pack, and skipped fixtures | **PASS** (5/5 cases) | <https://github.com/nemeregiftbrown-byte/ProtocolCanary-Action/actions/runs/39407695231> |
 | 2026-10-20 | `ba9a8b5` (branch `feat/436-439-batch`) | 0.2.0 (`v0.2.0`) | **installed by the Action itself** (`cargo install --git … --tag v0.2.0`) | `protocol-28` (commit `75ec2c2`) | consumer workflow (`uses: ./`) from this branch, offline | **FAIL** — the Action could not be loaded | <https://github.com/nemeregiftbrown-byte/ProtocolCanary-Action/actions/runs/39407695231> |
 | 2026-10-20 | `ba9a8b5` (branch `feat/436-439-batch`) | 0.1.1 (`v0.1.1`) | **installed by the Action itself** (`cargo install --git … --tag v0.1.1`) | `protocol-28` (commit `75ec2c2`) | same consumer scenario | **FAIL** — same load failure | <https://github.com/nemeregiftbrown-byte/ProtocolCanary-Action/actions/runs/39407695231> |
+| 2026-11-20 | HEAD | 0.3.0 (`v0.3.0`) | built from source (`cargo build --release --locked`) | `protocol-30` (commit `9feb1a8`) | offline engine-compat suite & live matrix verification | **PENDING** | Required execution criteria detailed below |
 
 An earlier full pass of the same engine-compat job (built from tags,
 before the exit-code suite existed) is recorded at
@@ -55,3 +56,13 @@ version is recorded as passing or added to the supported-versions table.
   scenario is the offline one only.
 - The Windows/macOS coverage from issue #436 is process-level (mock
   engine) and does not touch a real engine; it is not recorded here.
+
+## Engine 0.3.0 verification guidance and parameters (#605)
+
+### Required Test Scenarios
+To certify engine 0.3.0 compatibility and record an official **PASS** outcome, execution must cover:
+1. **Offline Test Suite:** Run `tests/integration/real-engine.test.ts` and `tests/integration/real-engine-exit-codes.test.ts` against the engine built from source (`cargo build --release --locked`).
+2. **Fixture Pack Commit:** Verification must pin immutable 40-character commit SHAs in `ProtocolCanary-Fixtures` (specifically commit `9feb1a85f64cd43201685fe233bf9ef15a38a752` for Protocol 30).
+3. **CLI Options and Passphrase:** Explicit `--network-passphrase` parameter support must be tested across both Testnet (`Test SDF Network ; September 2015`) and Futurenet (`Test SDF Future Network ; October 2022`).
+4. **Recording Outcomes:** Each test scenario must record the exact GitHub Actions run URL, target commit, engine source, and scenario parameters in the compatibility table above. Assumed or estimated passes are strictly prohibited.
+

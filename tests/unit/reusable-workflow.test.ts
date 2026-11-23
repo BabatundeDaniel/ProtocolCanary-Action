@@ -159,6 +159,76 @@ describe("reusable-canary-check workflow (#366)", () => {
     expect(SOURCE).toContain("FAIL_ON_WARNING: ${{ inputs.fail-on-warning }}");
     expect(SOURCE).toContain("BASELINE_REPORT: ${{ inputs.baseline-report }}");
   });
+
+  it("asserts input parity between action.yml and reusable workflow inputs (#608)", () => {
+    const actionPath = path.join(__dirname, "..", "..", "action.yml");
+    const actionSource = fs.readFileSync(actionPath, "utf8");
+    const actionLines = actionSource.split(/\r?\n/);
+    const actionTop = collectChildren(actionLines, 0);
+    const actionInputs = collectChildren(child(actionTop, "inputs").lines, 2);
+    const actionInputNames = new Set(actionInputs.map((i) => i.name));
+
+    const workflowInputNames = new Set(INPUTS.map((i) => i.name));
+
+    // Runner-internal / action-specific inputs that are managed by the runner environment
+    // or mapped under alternate names by the reusable workflow wrapper
+    const RUNNER_INTERNAL_ALLOWLIST = new Set([
+      "working-directory", // exposed as project-root
+      "fixtures-pack-version", // exposed as fixtures-version
+      "fixtures-dir", // computed dynamically from project-root
+      "config", // discovered in project-root
+      "version",
+      "allow-empty",
+      "annotations",
+      "cache-dir",
+      "diagnostics",
+      "engine-env-passthrough",
+      "fixture",
+      "fixtures-pack-protocol",
+      "generate-receipt",
+      "github-token",
+      "junit-report",
+      "live-cache-ttl-seconds",
+      "max-concurrency",
+      "network",
+      "network-passphrase",
+      "no-cache",
+      "offline",
+      "pr-comment",
+      "report-retention-days",
+      "rpc-max-retries",
+      "rpc-retry-delay-ms",
+      "rpc-timeout-seconds",
+      "rpc-url",
+      "strict-integrity",
+      "surface",
+      "timeout-minutes",
+      "upload-report",
+    ]);
+
+    // Every action input must be exposed in the reusable workflow or accounted for in the allowlist
+    for (const name of actionInputNames) {
+      const isExposed = workflowInputNames.has(name);
+      const isAllowedInternal = RUNNER_INTERNAL_ALLOWLIST.has(name);
+      expect(
+        isExposed || isAllowedInternal,
+        `Action input '${name}' is neither exposed in reusable-canary-check.yml nor listed in RUNNER_INTERNAL_ALLOWLIST`,
+      ).toBe(true);
+    }
+
+    // Verify types and defaults for shared inputs
+    const stripQuotes = (s?: string): string => (s ?? "").replace(/^["']|["']$/g, "").trim();
+    for (const input of INPUTS) {
+      const workflowFields = fieldsOf(input.lines);
+      const actionInput = actionInputs.find((i) => i.name === input.name);
+      if (actionInput) {
+        const actionFields = fieldsOf(actionInput.lines);
+        if (actionFields.has("default") && workflowFields.has("default")) {
+          expect(stripQuotes(workflowFields.get("default"))).toBe(stripQuotes(actionFields.get("default")));
+        }
+      }
+    }
+  });
 });
 
 /**
