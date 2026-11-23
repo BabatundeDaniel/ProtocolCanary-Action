@@ -373,6 +373,19 @@ All notable changes to this project are documented in this file.
   path, while `allow-empty: true` proceeds to normal resolution and
   installation.
 
+- Added empty-and-malformed coverage to
+  `tests/unit/prebuilt-install-failures.test.ts` (#601): a 0-byte checksum
+  asset, and checksum lines with no separator, a non-hex digest, a truncated
+  digest, no digest at all, the `sha256sum` single-space separator, a bare
+  binary-mode marker, comments-only, and blank-lines-only. Each pins that
+  `ensureCanaryInstalled` fails closed with an `InstallationFailedError` that
+  names the checksum manifest — never an unhandled parsing error — without
+  executing a downloaded file, without falling back to `cargo install`, and
+  without leaving a staging directory behind. A mixed manifest (corrupt lines
+  plus one well-formed entry for a different asset) pins that the corrupt
+  lines are dropped rather than half-parsed, so the run reports the missing
+  exact entry instead of accepting a garbage digest.
+
 ## [0.1.1]
 
 ### Changed
