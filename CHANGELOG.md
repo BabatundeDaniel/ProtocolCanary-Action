@@ -272,6 +272,14 @@ All notable changes to this project are documented in this file.
   annotation, summary, and outputs like any other reason Canary could not
   run. The directory is never created behind the user's back.
 
+- The reproduction command in the job summary no longer single-quotes
+  option-shaped arguments that carry `=`, so `--network=testnet` and
+  `--fixture=p28-xdr` read as the flags they are instead of
+  `'--network=testnet'` (#606). Only the leading `-` is required to make `=`
+  inert in that position; an argument that starts with `=`, a bare `NAME=value`
+  word, and anything containing a space, quote, or shell metacharacter are
+  still quoted exactly as before, so the command stays safe to paste.
+
 ### Fixed
 
 - `examples/protocol-28.yml`'s fixtures checkout no longer pins

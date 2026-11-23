@@ -302,3 +302,43 @@ describe("maskRpcUrl edge cases (#515)", () => {
     expect(maskRpcUrl(input)).toBe(input);
   });
 });
+
+describe("quoteForShell keeps `=` in flag values unquoted (#606)", () => {
+  it.each([
+    "--network=testnet",
+    "--rpc-url=https://soroban-testnet.stellar.org",
+    "--fixture=p28-xdr-cap83-empty-tx-set",
+    "--surface=soroban",
+    "--cache-dir=.stellar-canary-cache",
+    "--protocol=28",
+    // An empty value and a repeated `=` are still inert in this position.
+    "--network=",
+    "--label=a=b",
+  ])("leaves the flag %j unquoted", (arg) => {
+    expect(quoteForShell(arg)).toBe(arg);
+  });
+
+  it.each([
+    ["a leading `=` is zsh command-path expansion", "=testnet", "'=testnet'"],
+    ["a space", "--network=test net", "'--network=test net'"],
+    ["a variable expansion", "--network=$NET", "'--network=$NET'"],
+    ["a command substitution", "--network=$(id)", "'--network=$(id)'"],
+    ["a semicolon", "--network=testnet;rm -rf /", "'--network=testnet;rm -rf /'"],
+    ["an ampersand", "--rpc-url=https://example.com/a&b", "'--rpc-url=https://example.com/a&b'"],
+    ["a glob", "--fixture=*", "'--fixture=*'"],
+    ["a backtick", "--fixture=`id`", "'--fixture=`id`'"],
+    ["an embedded single quote", "--msg=it's", "'--msg=it'\\''s'"],
+    ["a newline", "--network=testnet\nrm -rf /", "'--network=testnet\nrm -rf /'"],
+    // Not option-shaped: `NAME=value` reads as an assignment, so it stays quoted.
+    ["a bare assignment word", "a=b", "'a=b'"],
+    ["a bare assignment with a path value", "PATH=/usr/bin", "'PATH=/usr/bin'"],
+  ])("still quotes %s", (_name, input, expected) => {
+    expect(quoteForShell(input)).toBe(expected);
+  });
+
+  it("quotes a masked RPC URL, whose brackets are not inert characters", () => {
+    expect(quoteForShell("--rpc-url=https://[REDACTED]@example.com/rpc[REDACTED]")).toBe(
+      "'--rpc-url=https://[REDACTED]@example.com/rpc[REDACTED]'",
+    );
+  });
+});
