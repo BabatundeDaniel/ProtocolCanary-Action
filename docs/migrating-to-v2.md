@@ -104,6 +104,79 @@ To opt into the v2 engine behavior, use the v2 Action line or pin
 precedence over the Action's default. A job that intentionally checks an empty
 fixture set must set `allow-empty: "true"` when using `0.2.0` or newer.
 
+### Output additions
+
+The v2 Action line publishes outputs that the `v1` tag does not have, so a
+workflow that consumed only `status` and the counts under v1 gains two more
+signals at no configuration cost. The descriptions here match the ones in
+[`action.yml`](../action.yml); see the README output table for the full set.
+
+#### `coverage-state`
+
+How completely the fixture set was exercised: `full` when every discovered
+fixture ran and nothing was skipped, `partial` when at least one fixture ran
+but others were skipped, and `none` when nothing ran at all, which covers both
+an empty run and an execution failure. The output is set on every path,
+including the execution-failure path, where it is always `none`, so a consumer
+never has to distinguish "unset" from "no coverage".
+
+Use it where v1 workflows used `status` alone. A `pass` from a run that skipped
+most of the pack is weaker evidence than a `pass` at `coverage-state: full`,
+and under engine `0.2.0` an empty fixture set is an error rather than a success,
+so coverage is now something a promoting job can assert instead of assume.
+
+#### `receipt-path`
+
+The Execution Receipt is the per-run provenance record (`receiptVersion: 1`):
+engine version and engine build commit, fixture-pack digest, target protocol,
+observed protocol, and timestamp. It is produced only when you opt in with
+`generate-receipt: "true"`.
+
+- `receipt-path` is the absolute path to the receipt JSON in the runner temp
+  directory. Each invocation writes a distinct file, so a later step cannot
+  overwrite an earlier receipt. The output is set only when receipt generation
+  is enabled and Canary produced a parsable report; it is unset otherwise,
+  including on an execution failure.
+- The Action also uploads that file as the `stellar-canary-receipt-<run-id>`
+  artifact, so the archived copy is scoped to the run rather than to a name a
+  later run could replace.
+- Fields the installed engine's report does not carry, such as an older release
+  without `engineCommit` or `packDigest`, are recorded as `unknown`. The Action
+  never substitutes a plausible value.
+
+A receipt is a provenance record, not a signed attestation: it reports what the
+Action observed on that runner. Archive it alongside the JSON report it
+describes, and gate archival on the output being present rather than on the
+verdict, because a receipt can exist for a run that failed its checks.
+
+#### Inspecting coverage and receipts downstream
+
+```yaml
+- uses: StellarCanary/ProtocolCanary-Action@v2
+  id: canary
+  with:
+    protocol: "28"
+    generate-receipt: "true"
+
+# Gate the promotion on coverage, not only on the verdict.
+- name: Promote protocol build
+  if: steps.canary.outputs.status == 'pass' && steps.canary.outputs.coverage-state == 'full'
+  run: echo "promoting the protocol 28 build"
+
+# Evidence steps belong on the failure path too. `receipt-path` is empty when
+# Canary produced no parsable report, so the guard is the output itself rather
+# than `status`.
+- name: Record the execution receipt
+  if: steps.canary.outputs.receipt-path != ''
+  env:
+    CANARY_RECEIPT: ${{ steps.canary.outputs.receipt-path }}
+  run: echo "archiving receipt $CANARY_RECEIPT"
+```
+
+The two conditions are independent on purpose: a receipt exists whenever the
+report was parsable and receipts were requested, while promotion needs both the
+verdict and full coverage.
+
 ## Verification status
 
 The tagged engine changelog documents the behavior changes above. This Action's

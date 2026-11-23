@@ -223,6 +223,14 @@ All notable changes to this project are documented in this file.
   two things a copy-paste user gets wrong: `report` is empty on an execution
   failure, and `exit-code` belongs to the reusable workflow, not to the
   Action (#602).
+- `docs/migrating-to-v2.md` gains an "Output additions" section under Workflow
+  changes: `coverage-state` (`full`, `partial`, `none`, always set, including
+  on the execution-failure path where it is `none`) and `receipt-path` (set
+  only with `generate-receipt: "true"` and a parsable report, archived as the
+  run-scoped `stellar-canary-receipt-<run-id>` artifact, `unknown` for fields
+  an older engine does not report). The wording follows `action.yml`, and a
+  YAML snippet shows the promotion gate keyed on coverage and the evidence step
+  keyed on the receipt output rather than on `status` (#604).
 
 ### Added
 
