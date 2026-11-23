@@ -75,6 +75,37 @@ class FakeChild extends EventEmitter {
   }
 }
 
+/** A child whose `close` waits for its stdio streams to close, which is what
+ * a real one does — and the shape behind #600: a helper that inherited the
+ * write end keeps the pipe open after the direct child is gone, so signalling
+ * it again is a no-op and the bound never fires. `kill` here deliberately
+ * never closes anything, so only releasing the local read ends settles it.
+ * Modelling it against a fake child is what makes the case portable to the
+ * Windows runner, where the real-process version cannot be reproduced. */
+class StreamHoldingChild extends EventEmitter {
+  readonly stdout = new PassThrough();
+  readonly stderr = new PassThrough();
+  readonly signals: NodeJS.Signals[] = [];
+  private streamsLeft = 2;
+
+  constructor() {
+    super();
+    for (const stream of [this.stdout, this.stderr]) {
+      stream.once("close", () => {
+        this.streamsLeft -= 1;
+        if (this.streamsLeft === 0) {
+          this.emit("close", null, "SIGKILL");
+        }
+      });
+    }
+  }
+
+  kill(signal: NodeJS.Signals = "SIGTERM"): boolean {
+    this.signals.push(signal);
+    return true;
+  }
+}
+
 const MOCK_CANARY = path.join(__dirname, "..", "fixtures", "mock-canary.cjs");
 const MOCK_CANARY_COMMAND = process.platform === "win32" ? process.execPath : MOCK_CANARY;
 const MOCK_CANARY_PREFIX = process.platform === "win32" ? [MOCK_CANARY] : [];
@@ -1016,7 +1047,7 @@ describe("runCheck timeout escalation", () => {
     spawnMock.mockClear();
   });
 
-  function fakeSpawn(child: FakeChild): void {
+  function fakeSpawn(child: { stdout: PassThrough; stderr: PassThrough; signals: NodeJS.Signals[] }): void {
     spawnMock.mockImplementationOnce(() => child as unknown as ChildProcess);
   }
 
@@ -1026,6 +1057,18 @@ describe("runCheck timeout escalation", () => {
 
     await expect(runCheck("fake-canary", ["check"], 10, { sigkillGraceMs: 20 })).rejects.toThrow(TimeoutError);
     expect(child.signals).toEqual(["SIGTERM", "SIGKILL"]);
+  });
+
+  it("settles the bound when the child leaves its inherited stdio open past SIGKILL (#600)", async () => {
+    const child = new StreamHoldingChild();
+    fakeSpawn(child);
+
+    // Nothing in this fake ever closes the streams, so without the
+    // escalation's `releaseStdio()` this promise would never settle.
+    await expect(runCheck("fake-canary", ["check"], 10, { sigkillGraceMs: 20 })).rejects.toThrow(TimeoutError);
+    expect(child.signals).toEqual(["SIGTERM", "SIGKILL"]);
+    expect(child.stdout.destroyed, "the escalation released the read end").toBe(true);
+    expect(child.stderr.destroyed, "the escalation released the read end").toBe(true);
   });
 
   it("never sends SIGKILL when the process exits after SIGTERM", async () => {

@@ -671,6 +671,20 @@ export function runCheck(
     let timedOut = false;
     let sigkillHandle: NodeJS.Timeout | undefined;
 
+    /**
+     * Release this side of the stdio pipes. `close` waits for every stdio
+     * stream to close, and a pipe stays open while *any* process holds a
+     * write end to it — so a child that exits after spawning a grandchild
+     * which inherited its stdout can keep `close`, and therefore this
+     * promise, from ever firing even after SIGKILL, because signalling the
+     * already-exited child is a no-op (#600). Destroying the local read ends
+     * is what keeps the bound real.
+     */
+    const releaseStdio = (): void => {
+      child.stdout?.destroy();
+      child.stderr?.destroy();
+    };
+
     const timeoutHandle = setTimeout(() => {
       timedOut = true;
       // Arm the escalation timer *before* signalling: if the process closes
@@ -679,6 +693,7 @@ export function runCheck(
       // (or worse, signals a reused pid) after the fact.
       sigkillHandle = setTimeout(() => {
         child.kill("SIGKILL");
+        releaseStdio();
       }, sigkillGraceMs);
       child.kill("SIGTERM");
     }, timeoutMs);
