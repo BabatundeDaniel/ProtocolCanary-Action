@@ -214,6 +214,15 @@ All notable changes to this project are documented in this file.
   and a regular file is never a valid fixtures directory. The Quick Start
   note and the Troubleshooting table now point at the new
   `Invalid "fixtures-dir" input` message.
+- `examples/protocol-28.yml` now shows how to consume the Action's outputs:
+  the Action step carries `id: canary`, a `Check canary verdict` step reads
+  `steps.canary.outputs.status`, `report` and `skipped` (passed through `env:`
+  rather than interpolated into the shell), and a
+  `Publish compatibility evidence` step gates a follow-up on
+  `status == 'pass' && coverage-state == 'full'`. The comments call out the
+  two things a copy-paste user gets wrong: `report` is empty on an execution
+  failure, and `exit-code` belongs to the reusable workflow, not to the
+  Action (#602).
 
 ### Added
 
