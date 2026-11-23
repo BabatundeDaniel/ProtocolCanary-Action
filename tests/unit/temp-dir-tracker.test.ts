@@ -70,9 +70,15 @@ describe("TempDirTracker (#501)", () => {
 
     afterEach(() => {
       // A read-only directory cannot be unlinked from its parent until the
-      // mode is restored; put it back before removing the base.
+      // mode is restored; put it back before removing the base. Skipping a
+      // directory that is already gone is not a Windows special case: a
+      // runner that ignores mode bits (root on POSIX, anything on NTFS)
+      // deletes it during cleanup, and chmod on the missing path would throw
+      // out of the hook and fail the test for the wrong reason.
       for (const dir of locked) {
-        fs.chmodSync(dir, 0o755);
+        if (fs.existsSync(dir)) {
+          fs.chmodSync(dir, 0o755);
+        }
       }
       fs.rmSync(baseDir, { recursive: true, force: true });
     });

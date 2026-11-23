@@ -286,7 +286,17 @@ describe("stream handles left open past the bound (#600)", () => {
     ]).env;
   }
 
-  it("settles the bound with a TimeoutError carrying the captured output, while the inherited pipe stays open", async () => {
+  // POSIX-only, and measured rather than assumed: on the Windows runner the
+  // direct child's exit closes the pipe it handed down, so `close` fires and
+  // `runCheck` resolves normally instead of being held hostage — the hang
+  // these tests pin cannot be produced there. (Windows also has no SIGTERM
+  // delivery for Node children, so a handler cannot record the signal.) The
+  // same release-then-settle path is asserted portably against a fake child
+  // whose `close` waits on its stdio streams — see the #600 case in the
+  // "runCheck timeout escalation" suite in tests/unit/runner.test.ts.
+  const itPosix = process.platform === "win32" ? it.skip : it;
+
+  itPosix("settles the bound with a TimeoutError carrying the captured output, while the inherited pipe stays open", async () => {
     process.env.STANDIN_MODE = "exit-leave-stream-open";
     const started = Date.now();
 
@@ -316,14 +326,7 @@ describe("stream handles left open past the bound (#600)", () => {
     await expect(waitForChildGone(pid as number, 2_000)).resolves.toBe(true);
   });
 
-  // POSIX-only: Windows has no SIGTERM delivery for Node children (a `kill`
-  // terminates the process outright), so a handler cannot record the signal
-  // there. The escalation this asserts is also covered against a real
-  // process by the test above in this block and against a fake child by
-  // tests/unit/runner.test.ts.
-  const itSignals = process.platform === "win32" ? it.skip : it;
-
-  itSignals("sends SIGTERM, then SIGKILL, and settles when the child ignores the first", async () => {
+  itPosix("sends SIGTERM, then SIGKILL, and settles when the child ignores the first", async () => {
     process.env.STANDIN_MODE = "ignore-sigterm";
     const started = Date.now();
 
