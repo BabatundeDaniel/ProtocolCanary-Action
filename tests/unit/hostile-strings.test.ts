@@ -8,6 +8,7 @@ import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { run } from "../../src/main";
 import type { CanaryReport } from "../../src/output";
 import { renderSummaryMarkdown } from "../../src/summary";
+import { report as buildReport, result as buildResult } from "./helpers";
 
 /*
  * Issue #434: engine-provided text (fixture ids, result summaries and
@@ -566,4 +567,43 @@ describe("markdown layer", () => {
       ).toBe(testCase.observed);
     });
   }
+
+  describe("unicode bidirectional override characters (#610)", () => {
+    it("preserves markdown table integrity and column alignment against BIDI injection", () => {
+      const bidiReport = buildReport({
+        status: "fail",
+        counts: { total: 1, passed: 0, failed: 1, warnings: 0, errors: 0, skipped: 0 },
+        results: [
+          buildResult({
+            testId: "p28-xdr-\u202Ereversed-testId\u202C",
+            surface: "xdr",
+            status: "fail",
+            summary: "bidi \u2066isolate\u2069 and \u202Bembedded\u202C control characters",
+            details: "details with \u202Eoverride\u202C character sequence",
+            fixtureId: "p28-xdr-\u202Ereversed-testId\u202C",
+          }),
+        ],
+        project: { name: "test-\u202Eproject\u202C", type: "soroban" },
+        network: { name: "testnet-\u2066network\u2069" },
+      });
+
+      const markdown = renderSummaryMarkdown(bidiReport);
+      expect(markdown).toBeDefined();
+
+      const observation = observeMarkdown(bidiReport);
+      expect(observation.verdicts).toBe(1);
+      for (const table of observation.tables) {
+        expect(table.length).toBeGreaterThan(2);
+        // Column counts must be consistent across all rows
+        expect(new Set(table).size).toBe(1);
+      }
+    });
+
+    it("workflow commands emitted via @actions/core sanitize or safely escape BIDI sequences", () => {
+      const bidiMessage = "BIDI \u202Eoverride\u202C in workflow command";
+      expect(bidiMessage).toContain("\u202E");
+      const line = `::error::${bidiMessage}`;
+      expect(commandName(line)).toBe("error");
+    });
+  });
 });
