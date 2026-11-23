@@ -33,7 +33,8 @@ import {
 } from "../../src/canary";
 import type { ChildProcessEnvironment } from "../../src/child-env";
 import { buildChildEnvironment } from "../../src/child-env";
-import { InstallationFailedError } from "../../src/errors";
+import { InstallationFailedError, TimeoutError } from "../../src/errors";
+import { runCheck } from "../../src/runner";
 
 /** Injected bound so a hanging stand-in resolves fast; every assertion
  * below tolerates at most a couple of seconds of wall time. */
@@ -91,13 +92,16 @@ async function captureError(promise: Promise<unknown>): Promise<unknown> {
   }
 }
 
-/** The recorded stand-in PID, or undefined when the child never wrote it. */
-function standinPid(): number | undefined {
-  try {
-    return Number(fs.readFileSync(pidFile, "utf8"));
-  } catch {
-    return undefined;
-  }
+/**
+ * The recorded stand-in PID, or undefined when the child never wrote it. The
+ * child writes it as its very first action, so the only reason it can still be
+ * missing when the bound expires is that the runner had not scheduled the
+ * process yet — with 61 worker spawns in one file that is a real race, and it
+ * would read as a broken bound. Waiting is bounded, and the assertion at each
+ * call site is unchanged: the PID still has to exist.
+ */
+async function standinPid(): Promise<number | undefined> {
+  return waitForPid(pidFile);
 }
 
 let tempDir: string;
@@ -144,6 +148,206 @@ function installShim(name: "tar" | "cargo"): void {
 // for its Unix-signal behaviour. The timeout code path itself is shared.
 const itShim = process.platform === "win32" ? it.skip : it;
 
+// #600 stand-in: exits (or ignores SIGTERM) after spawning a grandchild that
+// *inherits* its stdout/stderr, so the pipe stays open in a process the bound
+// never signalled. This is the shape that can leave `close` — and therefore
+// `runCheck`'s promise — waiting forever: the direct child is already gone,
+// so SIGTERM and SIGKILL are both no-ops, and the surviving grandchild holds
+// the only remaining write end. Node scripts are used so the same stand-in
+// runs on the Windows, macOS and Linux runners.
+//
+// The output goes out through `fs.writeSync(1, …)`: a pipe write queued by
+// `process.stdout.write` can be dropped by a following `process.exit()`, and
+// a lost line would look like a broken bound rather than a flaky harness.
+const STREAM_STANDIN_SOURCE = [
+  'const fs = require("node:fs");',
+  'const { spawn } = require("node:child_process");',
+  'const pidFile = process.env.STANDIN_PID_FILE;',
+  'if (pidFile) { fs.writeFileSync(pidFile, String(process.pid)); }',
+  'const gcPidFile = process.env.STANDIN_GC_PID_FILE;',
+  'const mode = process.env.STANDIN_MODE ?? "exit-leave-stream-open";',
+  'const grandchild = spawn(process.execPath, ["-e", "globalThis.hold = setInterval(() => {}, 1000);"], {',
+  '  stdio: "inherit",',
+  "});",
+  'if (gcPidFile) { fs.writeFileSync(gcPidFile, String(grandchild.pid)); }',
+  "grandchild.unref();",
+  'if (mode === "exit-leave-stream-open") {',
+  '  fs.writeSync(1, "stellar-canary 0.1.0\\n");',
+  "  process.exit(0);",
+  "}",
+  'const sigFile = process.env.STANDIN_SIG_FILE;',
+  'process.on("SIGTERM", () => {',
+  '  if (sigFile) { fs.appendFileSync(sigFile, "SIGTERM\\n"); }',
+  "});",
+  'fs.writeSync(1, "partial engine log\\n");',
+  "setInterval(() => {}, 1000); // ignores SIGTERM; only SIGKILL ends it",
+].join("\n");
+
+/** The PID recorded in `file`, or undefined when it was never written. */
+function readPid(file: string): number | undefined {
+  try {
+    const value = Number(fs.readFileSync(file, "utf8"));
+    return Number.isInteger(value) && value > 0 ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** True when `pid` still names a live process this test may observe. */
+function isAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Reads the PID the stand-in records as its very first action, waiting only
+ * for that file to appear. Under a loaded runner a child can be scheduled a
+ * few hundred milliseconds after the bound expires; this absorbs that start-up
+ * jitter without touching what is asserted — the PID still has to exist, and
+ * the child still has to be the one the bound terminated.
+ */
+async function waitForPid(file: string, deadlineMs = 1_000): Promise<number | undefined> {
+  const start = Date.now();
+  for (;;) {
+    const pid = readPid(file);
+    if (pid !== undefined) {
+      return pid;
+    }
+    if (Date.now() - start >= deadlineMs) {
+      return undefined;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
+
+// Reuses {@link SHORT_BOUND_MS} (600ms), the bound the #521 tests in this file
+// already prove against real Node children in CI, so the child is reliably
+// past its own start-up — and therefore has written its PID file and its
+// output — before the clock expires. `SHORT_BOUND_MS + this grace` is ~1.1s,
+// inside the 2s the tests allow for.
+const STREAM_SIGKILL_GRACE_MS = 500;
+
+describe("stream handles left open past the bound (#600)", () => {
+  let streamStandin: string;
+  let streamPid: string;
+  let gcPidFile: string;
+  let sigFile: string;
+  let savedGcPidFile: string | undefined;
+  let savedSigFile: string | undefined;
+
+  beforeEach(() => {
+    // `tempDir` comes from the suite-level beforeEach, which runs first, and
+    // is removed by the suite-level afterEach, which runs last — so the
+    // grandchild is killed before its scratch directory disappears.
+    streamStandin = path.join(tempDir, "stream-stand-in.cjs");
+    streamPid = path.join(tempDir, "stream.pid");
+    gcPidFile = path.join(tempDir, "grandchild.pid");
+    sigFile = path.join(tempDir, "signals.txt");
+    fs.writeFileSync(streamStandin, `${STREAM_STANDIN_SOURCE}\n`);
+    // The suite-level hook already points STANDIN_PID_FILE at its own
+    // stand-in; these tests need their child's PID in a separate file so the
+    // two suites' children can be told apart.
+    process.env.STANDIN_PID_FILE = streamPid;
+    savedGcPidFile = process.env.STANDIN_GC_PID_FILE;
+    savedSigFile = process.env.STANDIN_SIG_FILE;
+    process.env.STANDIN_GC_PID_FILE = gcPidFile;
+    process.env.STANDIN_SIG_FILE = sigFile;
+  });
+
+  afterEach(() => {
+    if (savedGcPidFile === undefined) delete process.env.STANDIN_GC_PID_FILE;
+    else process.env.STANDIN_GC_PID_FILE = savedGcPidFile;
+    if (savedSigFile === undefined) delete process.env.STANDIN_SIG_FILE;
+    else process.env.STANDIN_SIG_FILE = savedSigFile;
+    // The bound must not depend on the grandchild cooperating, which is
+    // exactly why it is still running when the promise settles. The test,
+    // not the code under test, owns its lifecycle.
+    const pid = readPid(gcPidFile);
+    if (pid !== undefined) {
+      try {
+        process.kill(pid, "SIGKILL");
+      } catch {
+        // already gone
+      }
+    }
+  });
+
+  /** The filtered child environment, widened for the #600 controls. */
+  function streamChildEnv(): ChildProcessEnvironment {
+    return buildChildEnvironment(process.env, process.platform, [
+      "STANDIN_MODE",
+      "STANDIN_PID_FILE",
+      "STANDIN_GC_PID_FILE",
+      "STANDIN_SIG_FILE",
+    ]).env;
+  }
+
+  it("settles the bound with a TimeoutError carrying the captured output, while the inherited pipe stays open", async () => {
+    process.env.STANDIN_MODE = "exit-leave-stream-open";
+    const started = Date.now();
+
+    const error = await captureError(
+      runCheck(process.execPath, [streamStandin], SHORT_BOUND_MS, {
+        sigkillGraceMs: STREAM_SIGKILL_GRACE_MS,
+        env: streamChildEnv(),
+      }),
+    );
+    // Identity, read the instant the promise settled: the process holding the
+    // inherited write end was still alive. The bound therefore cannot have
+    // been satisfied by that helper finishing on its own — its 1s interval
+    // keeps it running until this suite's own afterEach kills it.
+    const gcPid = readPid(gcPidFile);
+    const grandchildAliveAtSettle = gcPid !== undefined && isAlive(gcPid);
+    const settledAfterMs = Date.now() - started;
+
+    // Bound, not hung: the timeout plus the escalation grace, with slack.
+    expect(settledAfterMs).toBeLessThan(2_000);
+    expect(error).toBeInstanceOf(TimeoutError);
+    // The output captured before the child exited is still reported — the
+    // promise is bounded, the diagnostics are not thrown away with the pipe.
+    expect((error as TimeoutError).stdout).toContain("stellar-canary 0.1.0");
+    expect(grandchildAliveAtSettle, "the bound must not depend on the grandchild exiting").toBe(true);
+    const pid = await waitForPid(streamPid);
+    expect(pid, "the stand-in recorded its PID").toBeDefined();
+    await expect(waitForChildGone(pid as number, 2_000)).resolves.toBe(true);
+  });
+
+  // POSIX-only: Windows has no SIGTERM delivery for Node children (a `kill`
+  // terminates the process outright), so a handler cannot record the signal
+  // there. The escalation this asserts is also covered against a real
+  // process by the test above in this block and against a fake child by
+  // tests/unit/runner.test.ts.
+  const itSignals = process.platform === "win32" ? it.skip : it;
+
+  itSignals("sends SIGTERM, then SIGKILL, and settles when the child ignores the first", async () => {
+    process.env.STANDIN_MODE = "ignore-sigterm";
+    const started = Date.now();
+
+    const error = await captureError(
+      runCheck(process.execPath, [streamStandin], SHORT_BOUND_MS, {
+        sigkillGraceMs: STREAM_SIGKILL_GRACE_MS,
+        env: streamChildEnv(),
+      }),
+    );
+
+    expect(error).toBeInstanceOf(TimeoutError);
+    expect((error as TimeoutError).stdout).toContain("partial engine log");
+    expect(Date.now() - started).toBeLessThan(2_000);
+
+    // The child recorded the SIGTERM it received...
+    expect(fs.readFileSync(sigFile, "utf8")).toContain("SIGTERM");
+    // ...and it ignored that signal, so the only thing that can have ended it
+    // is the escalation to SIGKILL.
+    const pid = await waitForPid(streamPid);
+    expect(pid, "the stand-in recorded its PID").toBeDefined();
+    await expect(waitForChildGone(pid as number, 2_000)).resolves.toBe(true);
+  });
+});
+
 describe("documented helper-process bounds (#521)", () => {
   it("ships a 30s bound for both version probes and a 5-minute bound for tar", () => {
     expect(VERSION_PROBE_TIMEOUT_MS).toBe(30_000);
@@ -168,7 +372,7 @@ describe("getInstalledVersion bounds (#521)", () => {
     expect(warningText).toContain("did not finish within");
 
     // The child must actually be gone, not merely abandoned.
-    const pid = standinPid();
+    const pid = await standinPid();
     expect(pid, "the stand-in recorded its PID").toBeDefined();
     await expect(waitForChildGone(pid as number, 2_000)).resolves.toBe(true);
   });
@@ -205,7 +409,7 @@ describe("extractPrebuiltArchive bounds (#521)", () => {
     expect((error as InstallationFailedError).message).toContain("did not finish within");
     // A partially extracted directory must never be left usable.
     expect(fs.readdirSync(destDir)).toEqual([]);
-    const pid = standinPid();
+    const pid = await standinPid();
     expect(pid, "the stand-in recorded its PID").toBeDefined();
     await expect(waitForChildGone(pid as number, 2_000)).resolves.toBe(true);
   });
@@ -221,7 +425,7 @@ describe("ensureCargoAvailable bounds (#521)", () => {
     const message = (error as InstallationFailedError).message;
     expect(message).toContain("The `cargo` command was not found on this runner");
     expect(message).toContain("did not finish within");
-    const pid = standinPid();
+    const pid = await standinPid();
     expect(pid, "the stand-in recorded its PID").toBeDefined();
     await expect(waitForChildGone(pid as number, 2_000)).resolves.toBe(true);
   });
