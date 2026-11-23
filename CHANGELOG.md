@@ -214,6 +214,23 @@ All notable changes to this project are documented in this file.
   and a regular file is never a valid fixtures directory. The Quick Start
   note and the Troubleshooting table now point at the new
   `Invalid "fixtures-dir" input` message.
+- `examples/protocol-28.yml` now shows how to consume the Action's outputs:
+  the Action step carries `id: canary`, a `Check canary verdict` step reads
+  `steps.canary.outputs.status`, `report` and `skipped` (passed through `env:`
+  rather than interpolated into the shell), and a
+  `Publish compatibility evidence` step gates a follow-up on
+  `status == 'pass' && coverage-state == 'full'`. The comments call out the
+  two things a copy-paste user gets wrong: `report` is empty on an execution
+  failure, and `exit-code` belongs to the reusable workflow, not to the
+  Action (#602).
+- `docs/migrating-to-v2.md` gains an "Output additions" section under Workflow
+  changes: `coverage-state` (`full`, `partial`, `none`, always set, including
+  on the execution-failure path where it is `none`) and `receipt-path` (set
+  only with `generate-receipt: "true"` and a parsable report, archived as the
+  run-scoped `stellar-canary-receipt-<run-id>` artifact, `unknown` for fields
+  an older engine does not report). The wording follows `action.yml`, and a
+  YAML snippet shows the promotion gate keyed on coverage and the evidence step
+  keyed on the receipt output rather than on `status` (#604).
 
 ### Added
 
@@ -271,6 +288,14 @@ All notable changes to this project are documented in this file.
   execution; the error flows through the existing execution-failure
   annotation, summary, and outputs like any other reason Canary could not
   run. The directory is never created behind the user's back.
+
+- The reproduction command in the job summary no longer single-quotes
+  option-shaped arguments that carry `=`, so `--network=testnet` and
+  `--fixture=p28-xdr` read as the flags they are instead of
+  `'--network=testnet'` (#606). Only the leading `-` is required to make `=`
+  inert in that position; an argument that starts with `=`, a bare `NAME=value`
+  word, and anything containing a space, quote, or shell metacharacter are
+  still quoted exactly as before, so the command stays safe to paste.
 
 ### Fixed
 
@@ -364,6 +389,19 @@ All notable changes to this project are documented in this file.
   the error reaching the existing execution-failure summary and annotation
   path, while `allow-empty: true` proceeds to normal resolution and
   installation.
+
+- Added empty-and-malformed coverage to
+  `tests/unit/prebuilt-install-failures.test.ts` (#601): a 0-byte checksum
+  asset, and checksum lines with no separator, a non-hex digest, a truncated
+  digest, no digest at all, the `sha256sum` single-space separator, a bare
+  binary-mode marker, comments-only, and blank-lines-only. Each pins that
+  `ensureCanaryInstalled` fails closed with an `InstallationFailedError` that
+  names the checksum manifest — never an unhandled parsing error — without
+  executing a downloaded file, without falling back to `cargo install`, and
+  without leaving a staging directory behind. A mixed manifest (corrupt lines
+  plus one well-formed entry for a different asset) pins that the corrupt
+  lines are dropped rather than half-parsed, so the run reports the missing
+  exact entry instead of accepting a garbage digest.
 
 ## [0.1.1]
 

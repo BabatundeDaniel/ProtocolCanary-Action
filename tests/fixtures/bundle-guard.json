@@ -1,8 +1,8 @@
 {
-  "measuredAt": "2026-11-22",
-  "committedBundleBytes": 2157104,
+  "measuredAt": "2026-11-23",
+  "committedBundleBytes": 2157138,
   "sizeBudgetBytes": 2200030,
-  "sizeBudgetNote": "Committed dist/index.js is 2,157,104 bytes measured on 2026-11-22 after merging the #582 reproduction-command fix with the upstream security and version-gate fixes; the 2,200,030-byte budget leaves 42,926 bytes of headroom. Raise deliberately, with a reason, when the bundle legitimately grows.",
+  "sizeBudgetNote": "Committed dist/index.js is 2,157,138 bytes measured on 2026-11-23 after the #606 option-shaped quoting change added 34 bytes to the bundle; the 2,200,030-byte budget leaves 42,892 bytes of headroom. Raise deliberately, with a reason, when the bundle legitimately grows.",
   "allowedUrlHosts": [
     {
       "host": "127.0.0.1",
