@@ -53,6 +53,23 @@ export const goldenReports: readonly GoldenReport[] = [
     }),
   },
   {
+    name: "error-status",
+    report: report({
+      status: "error",
+      counts: { total: 1, passed: 0, failed: 0, warnings: 0, errors: 1, skipped: 0 },
+      results: [
+        result({
+          testId: "rpc-unavailable",
+          surface: "rpc",
+          status: "error",
+          summary: "RPC endpoint returned an internal error",
+          details: "HTTP 503 Service Unavailable: ledger service is temporarily unavailable",
+          fixtureId: "rpc-unavailable",
+        }),
+      ],
+    }),
+  },
+  {
     name: "mixed-failures-and-warnings",
     report: report({
       status: "fail",
