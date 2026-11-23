@@ -107,6 +107,14 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- A run that reaches its `timeout-minutes` bound now ends even when the Canary
+  process leaves its standard streams open. `runCheck` settles on the child's
+  `close`, and a pipe stays open while *any* process holds a write end to it,
+  so an engine that exits after spawning a helper which inherited its stdout
+  kept the Action waiting past SIGKILL — signalling the already-exited child is
+  a no-op. The escalation now releases this side of the pipes too, so the
+  timeout is a bound: the job receives its `TimeoutError` with whatever output
+  was captured instead of hanging until the workflow's own limit (#600).
 - Oversized job summaries are truncated deterministically instead of being
   rejected. GitHub refuses a step-summary append above its payload limit
   (HTTP 413), which lost the *whole* summary — including the pass/fail
