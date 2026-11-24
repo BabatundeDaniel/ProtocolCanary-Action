@@ -121,7 +121,10 @@ function redactUrlCredentials(text: string): string {
  * has been replaced, so a redaction cannot itself introduce a command.
  */
 export function escapeWorkflowCommands(text: string): string {
-  return text.replace(/::/g, "\\:\\:").replace(/`/g, "\\`");
+  return text.replace(/:{2,}/g, (colons) => "\\:".repeat(colons.length)).replace(/(\\*)`/g, (_match, slashes: string) => {
+    const prefix = slashes.length % 2 === 0 ? "\\" : "";
+    return `${prefix}${slashes}\``;
+  });
 }
 
 /**

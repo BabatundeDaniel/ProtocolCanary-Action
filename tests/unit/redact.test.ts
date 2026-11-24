@@ -188,6 +188,13 @@ describe("redact", () => {
     expect(output).toBe(`\\:\\:warning\\:\\:token ${REDACTED} seed ${REDACTED} env ${REDACTED}`);
   });
 
+  it("is idempotent for backticks and runs of colons", () => {
+    for (const input of ["`", ":::", "::::", "\\`", "\\\\`"]) {
+      const once = redact(input);
+      expect(redact(once)).toBe(once);
+    }
+  });
+
   it("is deterministic and safe to run twice", () => {
     process.env[ENV_NAME] = ENV_VALUE;
     const once = redact(`token ${GITHUB_PAT} env ${ENV_VALUE}`);
