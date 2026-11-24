@@ -220,8 +220,8 @@ describe(`seeded properties (SEED=${String(SEED)})`, () => {
 });
 
 describe("known defects guard", () => {
-  for (const [index, defect] of knownDefects.entries()) {
-    it(`entry ${String(index)} is tracked and still shows its recorded behaviour`, () => {
+  it("tracks recorded behavior for each known defect", () => {
+    for (const [index, defect] of knownDefects.entries()) {
       expect(defect.property).not.toBe("");
       expect(defect.expected).not.toBe("");
       expect(defect.issue).toMatch(/^https:\/\/github\.com\/StellarCanary\/ProtocolCanary-Action\/issues\/\d+$/);
@@ -237,6 +237,6 @@ describe("known defects guard", () => {
         );
       }
       expect(twice).toBe(defect.observed);
-    });
-  }
+    }
+  });
 });
