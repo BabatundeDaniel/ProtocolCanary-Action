@@ -83,6 +83,38 @@ describe("evaluateDownloadUrl", () => {
     expect(evaluateDownloadUrl("https://unknown.example/file").allowed).toBe(false);
     expect(evaluateDownloadUrl("/relative/file").allowed).toBe(false);
   });
+
+  it.each([
+    ["IPv4 literal host", "https://192.168.1.1/file"],
+    ["IPv6 loopback literal host", "https://[::1]/file"],
+    ["IPv6 literal host", "https://[2001:db8::1]/file"],
+  ])("rejects an %s", (_name, url) => {
+    const result = evaluateDownloadUrl(url);
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain("IP literal");
+  });
+
+  it.each([
+    ["GitHub host", "https://github.com:8443/releases/file"],
+    ["release CDN host", "https://release-assets.githubusercontent.com:444/file"],
+  ])("rejects a non-default port on the %s", (_name, url) => {
+    const result = evaluateDownloadUrl(url);
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain("port");
+  });
+
+  it("allows the explicit default HTTPS port", () => {
+    expect(evaluateDownloadUrl("https://github.com:443/releases/file").allowed).toBe(true);
+  });
+
+  it("handles URL scheme casing consistently", () => {
+    expect(evaluateDownloadUrl("HTTPS://github.com/releases/file").allowed).toBe(true);
+    expect(evaluateDownloadUrl("hTtPs://github.com/releases/file").allowed).toBe(true);
+
+    const result = evaluateDownloadUrl("HTTP://github.com/releases/file");
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain("HTTPS");
+  });
 });
 
 describe("evaluateRedirectHop", () => {
