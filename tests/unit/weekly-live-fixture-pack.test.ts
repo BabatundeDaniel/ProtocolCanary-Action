@@ -7,7 +7,6 @@ import { parse } from "yaml";
 const ROOT = path.join(__dirname, "..", "..");
 const WORKFLOW = path.join(ROOT, ".github", "workflows", "weekly-live.yml");
 const ENGINE_VERSION = "0.3.0";
-const P29_COMMIT = "347ad6846d46b7bdf605a299501354563d79f2d9";
 const P30_COMMIT = "9feb1a85f64cd43201685fe233bf9ef15a38a752";
 
 interface Step {
@@ -41,25 +40,25 @@ const workflow = parse(fs.readFileSync(WORKFLOW, "utf8")) as {
   jobs?: Record<string, Job>;
 };
 
-describe("weekly Testnet P30 identity and Futurenet P29 live checks", () => {
-  it("pins separate immutable fixture commits, target protocols and directories", () => {
+describe("weekly Testnet and Futurenet P30 identity live checks", () => {
+  it("pins the immutable Protocol 30 identity fixture for both networks", () => {
     const matrix = workflow.jobs?.["live-check"]?.strategy?.matrix?.include;
     expect(matrix).toEqual([
       {
         network: "testnet",
         protocol: "30",
         fixtures_commit: P30_COMMIT,
-        fixtures_label: "Protocol 30 Testnet identity (unreleased commit)",
+        fixtures_label: "Protocol 30 RPC identity (unreleased commit)",
         fixtures_dir: "fixtures/protocol-30",
         "rpc-url": "https://soroban-testnet.stellar.org",
         passphrase: "Test SDF Network ; September 2015",
       },
       {
         network: "futurenet",
-        protocol: "29",
-        fixtures_commit: P29_COMMIT,
-        fixtures_label: "fixtures-p29-v0.1.1 release",
-        fixtures_dir: "fixtures/protocol-29",
+        protocol: "30",
+        fixtures_commit: P30_COMMIT,
+        fixtures_label: "Protocol 30 RPC identity (unreleased commit)",
+        fixtures_dir: "fixtures/protocol-30",
         "rpc-url": "https://rpc-futurenet.stellar.org",
         passphrase: "Test SDF Future Network ; October 2022",
       },
