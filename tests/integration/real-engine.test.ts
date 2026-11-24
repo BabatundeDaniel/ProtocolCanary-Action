@@ -285,6 +285,23 @@ function suite(label: string, envName: string): void {
         expect(fs.readFileSync(SUMMARY_PATH, "utf8")).toContain("no checks ran");
       });
 
+      it("an unsupported protocol version fails the step as an execution failure (#630)", async () => {
+        // The engine exits 2 without a report when the requested protocol is
+        // not one it knows (99 is outside every released protocol range), so
+        // this must travel the execution-failure path rather than be mistaken
+        // for a compatibility verdict or a green run.
+        current = setUp(binary as string, version, { protocol: "99" });
+        await runAction();
+
+        expect(setFailedMock).toHaveBeenCalled();
+        const failureMessage = setFailedMock.mock.calls.map((call) => String(call[0])).join("\n");
+        expect(failureMessage).toContain("Protocol Canary could not be executed.");
+        expect(readOutputs(current.outputPath).status).toBe("execution-failed");
+        expect(fs.readFileSync(SUMMARY_PATH, "utf8")).toContain(
+          "Protocol Canary could not be executed.",
+        );
+      });
+
       it("a misspelled config section is rejected and the engine's field name reaches the summary", async () => {
         current = setUp(binary as string, version, { config: TYPO_CONFIG });
         await runAction();
