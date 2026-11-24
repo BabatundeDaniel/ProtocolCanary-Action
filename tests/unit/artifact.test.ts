@@ -212,6 +212,55 @@ describe("uploadReport", () => {
     expect(outcome).toEqual({ uploaded: false, reason: "string-rejection-reason" });
     expect(uploadArtifactMock).toHaveBeenCalledTimes(1);
   });
+
+  it("keeps the stable default name when the differentiator is empty or whitespace-only", async () => {
+    uploadArtifactMock.mockResolvedValue({ id: 1, size: 100 });
+
+    for (const differentiator of ["", "   ", "\t\n "]) {
+      uploadArtifactMock.mockClear();
+      const outcome = await uploadReport(REPORT_PATH, differentiator);
+
+      // The first attempt always uses the documented stable name, whatever the
+      // differentiator resolves to.
+      expect(outcome).toEqual({ uploaded: true, name: ARTIFACT_NAME, id: 1 });
+      expect(uploadArtifactMock).toHaveBeenCalledTimes(1);
+      expect(uploadArtifactMock).toHaveBeenCalledWith(ARTIFACT_NAME, [REPORT_PATH], REPORT_DIR);
+    }
+  });
+
+  it("retries under a unique name, not a dangling default name, when a blank differentiator collides", async () => {
+    uploadArtifactMock
+      .mockRejectedValueOnce(conflictError())
+      .mockResolvedValueOnce({ id: 2, size: 100 });
+
+    const outcome = await uploadReport(REPORT_PATH, "   ");
+
+    const retryName = uploadArtifactMock.mock.calls[1]?.[0] as string;
+    expect(outcome).toEqual({ uploaded: true, name: retryName, id: 2 });
+    expect(retryName).toMatch(new RegExp(`^${ARTIFACT_NAME}-[a-z0-9]+-[a-z0-9]+$`));
+    expect(retryName).not.toBe(`${ARTIFACT_NAME}-`);
+    expect(uploadArtifactMock).toHaveBeenNthCalledWith(2, retryName, [REPORT_PATH], REPORT_DIR);
+  });
+
+  it("sanitizes whitespace and punctuation in the differentiator used by a collision retry", async () => {
+    uploadArtifactMock
+      .mockRejectedValueOnce(conflictError())
+      .mockResolvedValueOnce({ id: 3, size: 100 });
+
+    const outcome = await uploadReport(REPORT_PATH, "  protocol 28 / testnet: !! ");
+
+    expect(outcome).toEqual({
+      uploaded: true,
+      name: `${ARTIFACT_NAME}-protocol-28-testnet`,
+      id: 3,
+    });
+    expect(uploadArtifactMock).toHaveBeenNthCalledWith(
+      2,
+      `${ARTIFACT_NAME}-protocol-28-testnet`,
+      [REPORT_PATH],
+      REPORT_DIR,
+    );
+  });
 });
 
 describe("fallbackArtifactName", () => {
@@ -230,6 +279,68 @@ describe("fallbackArtifactName", () => {
 
     expect(name).toMatch(new RegExp(`^${ARTIFACT_NAME}-[a-z0-9]+-[a-z0-9]+$`));
     expect(name).not.toBe(`${ARTIFACT_NAME}-`);
+  });
+
+  it("trims leading, trailing, and internal whitespace deterministically", () => {
+    expect(fallbackArtifactName("  protocol-28  ")).toBe(`${ARTIFACT_NAME}-protocol-28`);
+    expect(fallbackArtifactName("protocol 28 network testnet")).toBe(
+      `${ARTIFACT_NAME}-protocol-28-network-testnet`,
+    );
+    expect(fallbackArtifactName("\tprotocol-28\nnetwork ")).toBe(
+      `${ARTIFACT_NAME}-protocol-28-network`,
+    );
+  });
+
+  it("keeps consecutive hyphens inside the value and trims only the ends", () => {
+    expect(fallbackArtifactName("--protocol--28---testnet--")).toBe(
+      `${ARTIFACT_NAME}-protocol--28---testnet`,
+    );
+    expect(fallbackArtifactName("protocol!!!28")).toBe(`${ARTIFACT_NAME}-protocol-28`);
+  });
+
+  it("collapses punctuation, symbols, and emoji into single hyphens", () => {
+    expect(fallbackArtifactName("protocol/28 network:testnet@v2")).toBe(
+      `${ARTIFACT_NAME}-protocol-28-network-testnet-v2`,
+    );
+    expect(fallbackArtifactName("protocol-28 (testnet) [eu-west]")).toBe(
+      `${ARTIFACT_NAME}-protocol-28-testnet-eu-west`,
+    );
+    expect(fallbackArtifactName("protocol 28 🔥 network")).toBe(
+      `${ARTIFACT_NAME}-protocol-28-network`,
+    );
+  });
+
+  it("preserves the characters GitHub allows in an artifact name (dots, underscores, hyphens)", () => {
+    expect(fallbackArtifactName("protocol.28_v2-final")).toBe(
+      `${ARTIFACT_NAME}-protocol.28_v2-final`,
+    );
+    expect(fallbackArtifactName("protocol..28")).toBe(`${ARTIFACT_NAME}-protocol..28`);
+  });
+
+  it("never emits characters outside GitHub's artifact-name alphabet", () => {
+    const names = [
+      fallbackArtifactName("protocol 28 / 🔥 / testnet"),
+      fallbackArtifactName("!!! protocol 28 !!!"),
+      fallbackArtifactName("protocol..28"),
+      // A sanitizer-away value still yields a unique, valid name.
+      fallbackArtifactName("!!!"),
+    ];
+
+    for (const name of names) {
+      expect(name).toMatch(/^[A-Za-z0-9._-]+$/);
+    }
+  });
+
+  it("returns the default unique name when the differentiator is empty or whitespace-only", () => {
+    for (const differentiator of ["", "   ", "\t\n ", "  \u00a0  "]) {
+      const name = fallbackArtifactName(differentiator);
+
+      // No readable suffix, so the unique fallback applies — never a bare
+      // `stellar-protocol-canary-report-` with a dangling separator.
+      expect(name).toMatch(new RegExp(`^${ARTIFACT_NAME}-[a-z0-9]+-[a-z0-9]+$`));
+      expect(name).not.toBe(ARTIFACT_NAME);
+      expect(name).not.toBe(`${ARTIFACT_NAME}-`);
+    }
   });
 });
 
