@@ -52,6 +52,11 @@ jobs:
               echo "verdict: the comparison was not performed."
             } >> "$GITHUB_STEP_SUMMARY"
             echo "::error title=Report schema sync: infrastructure problem::could not download docs/schemas/report-v1.schema.json from Protocol-Canary main (network error or non-200). This is an infrastructure problem, not drift."
+            # A written summary and an ::error annotation do not fail the step
+            # by themselves. Exit non-zero so the job is red, as the workflow
+            # contract above documents; the comparison step is skipped, so
+            # without this the run would finish green despite fetching nothing.
+            exit 1
           fi
 
       - name: Compare with the pinned copy

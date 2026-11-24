@@ -1,9 +1,9 @@
-name: Weekly live integration (Testnet Protocol 30 identity / Futurenet Protocol 29)
+name: Weekly live integration (Protocol 30 Testnet/Futurenet identity)
 
-# Run published Engine v0.3.0 against independent immutable Fixtures pins.
-# Testnet checks Protocol 30 RPC identity only, not full XDR, Soroban,
-# transaction, Futurenet, or Mainnet Protocol 30 compatibility.
-# Futurenet still runs the published Protocol 29 fixture pack.
+# Run published Engine v0.3.0 against an immutable Protocol 30 identity
+# fixture. Its captured evidence is from Testnet; each live leg independently
+# checks that its RPC endpoint reports Protocol 30. This does not test full
+# XDR, Soroban, transaction, Futurenet, or Mainnet Protocol 30 compatibility.
 # Live failures are separate from PR-gating CI. Manual fixtures_ref overrides
 # apply to both legs; scheduled runs use the matrix pins.
 # Only the main-branch tracking job writes issues. See CONTRIBUTING.md.
@@ -43,15 +43,15 @@ jobs:
           - network: testnet
             protocol: "30"
             fixtures_commit: 9feb1a85f64cd43201685fe233bf9ef15a38a752
-            fixtures_label: Protocol 30 Testnet identity (unreleased commit)
+            fixtures_label: Protocol 30 RPC identity (unreleased commit)
             fixtures_dir: fixtures/protocol-30
             rpc-url: https://soroban-testnet.stellar.org
             passphrase: "Test SDF Network ; September 2015"
           - network: futurenet
-            protocol: "29"
-            fixtures_commit: 347ad6846d46b7bdf605a299501354563d79f2d9
-            fixtures_label: fixtures-p29-v0.1.1 release
-            fixtures_dir: fixtures/protocol-29
+            protocol: "30"
+            fixtures_commit: 9feb1a85f64cd43201685fe233bf9ef15a38a752
+            fixtures_label: Protocol 30 RPC identity (unreleased commit)
+            fixtures_dir: fixtures/protocol-30
             rpc-url: https://rpc-futurenet.stellar.org
             passphrase: "Test SDF Future Network ; October 2022"
     env:
@@ -70,8 +70,8 @@ jobs:
         with:
           repository: StellarCanary/ProtocolCanary-Fixtures
           path: fixtures
-          # Per-network immutable commits. P30 is a merged Fixtures commit,
-          # not a published release. P29 is the v0.1.1 peeled release commit.
+          # P30 is a merged Fixtures commit, not a published release. The
+          # single RPC identity fixture is exercised against both networks.
           ref: ${{ inputs.fixtures_ref || matrix.fixtures_commit }}
           persist-credentials: false
 

@@ -436,14 +436,13 @@ The weekly workflow runs two independent network checks with **Engine v0.3.0**:
 | Network | Scope | Immutable Fixtures commit | Path |
 | --- | --- | --- | --- |
 | Testnet | Protocol 30 `getVersionInfo.protocolVersion == 30` identity only | `9feb1a85f64cd43201685fe233bf9ef15a38a752` | `fixtures/protocol-30` |
-| Futurenet | Published Protocol 29 pack | `347ad6846d46b7bdf605a299501354563d79f2d9` (`fixtures-p29-v0.1.1`) | `fixtures/protocol-29` |
+| Futurenet | Protocol 30 `getVersionInfo.protocolVersion == 30` identity only | `9feb1a85f64cd43201685fe233bf9ef15a38a752` | `fixtures/protocol-30` |
 
-The Protocol 30 commit is **not a released fixture pack**. Its one Testnet
-RPC identity fixture and evidence were reviewed in Fixtures PRs #488 and
-#489. This check does not establish Protocol 30 XDR, Soroban, transaction
-semantics, Futurenet or Mainnet compatibility. Futurenet still checks the
-released Protocol 29 pack. The workflow never assumes both networks
-have the same current protocol.
+The Protocol 30 commit is **not a released fixture pack**. Its one RPC
+identity fixture and Testnet evidence were reviewed in Fixtures PRs #488
+and #489. The weekly workflow runs that identity assertion independently
+against both network endpoints; it does not establish Protocol 30 XDR,
+Soroban, transaction semantics, or broader Futurenet or Mainnet compatibility.
 
 Scheduled runs use each matrix leg's immutable commit, protocol and path.
 A manual dispatch may supply `fixtures_ref` to override the checkout
