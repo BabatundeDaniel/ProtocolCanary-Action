@@ -122,17 +122,21 @@ jobs:
           fi
 
           cargo_root="${CARGO_HOME:-${HOME}/.cargo}"
-          set +e
-          cargo install --locked --force --path "$cli_path" --root "$cargo_root" \
-            >"${evidence_dir}/build.stdout" 2>"${evidence_dir}/build.stderr"
-          install_status=$?
-          set -e
-          if [ "$install_status" -ne 0 ]; then
-            echo "::error::Engine build failed with exit code ${install_status}."
-            exit "$install_status"
+          binary="${cargo_root}/bin/stellar-canary"
+          if [ -x "$binary" ]; then
+            echo "Reusing cached engine binary at ${binary}."
+          else
+            set +e
+            cargo install --locked --force --path "$cli_path" --root "$cargo_root" \
+              >"${evidence_dir}/build.stdout" 2>"${evidence_dir}/build.stderr"
+            install_status=$?
+            set -e
+            if [ "$install_status" -ne 0 ]; then
+              echo "::error::Engine build failed with exit code ${install_status}."
+              exit "$install_status"
+            fi
           fi
 
-          binary="${cargo_root}/bin/stellar-canary"
           if [ ! -x "$binary" ]; then
             echo "::error::Installed stellar-canary binary is missing or not executable at ${binary}."
             exit 1

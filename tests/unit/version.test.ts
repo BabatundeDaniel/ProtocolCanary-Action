@@ -456,6 +456,29 @@ describe("resolveVersion", () => {
     );
   });
 
+  it("rejects an HTTP pagination link and falls back to tag-only resolution", async () => {
+    const insecureNextPage = "http://api.github.com/repos/StellarCanary/Protocol-Canary/tags?per_page=100&page=2";
+    const calls = mockHttpsPages([
+      {
+        body: tagsBody([{ name: "v9.9.9", sha: "zzz" }]),
+        link: `<${insecureNextPage}>; rel="next"`,
+      },
+    ]);
+
+    await expect(resolveVersion("0.1.0")).resolves.toEqual({
+      version: "0.1.0",
+      tag: "v0.1.0",
+      commitSha: undefined,
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url).toBe("https://api.github.com/repos/StellarCanary/Protocol-Canary/tags?per_page=100");
+    expect(calls.some(({ url }) => url === insecureNextPage)).toBe(false);
+    expect(vi.mocked(core.debug)).toHaveBeenCalledWith(
+      expect.stringContaining(`refusing unsafe GitHub URL ${insecureNextPage}: URL must use HTTPS`),
+    );
+  });
+
   it("caps pagination at MAX_TAG_PAGES when the Link header never terminates", async () => {
     // A malformed or hostile Link header must spin the page walk forever;
     // every request re-serves this page, so the loop has to stop itself.
