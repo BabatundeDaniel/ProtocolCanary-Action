@@ -165,6 +165,25 @@ describe("test-fork-boundary workflow (#369)", () => {
     }
   });
 
+  it("audits the shipped reusable workflow and releases its temporary directory (#628)", () => {
+    const script = extractRunScript(workflowSource(), "fork-boundary-audit");
+    const trackedBefore = tracker.size;
+    const result = runScript(script, { TARGET_WORKFLOW: REUSABLE_PATH });
+
+    // Exit 0 with no ::error:: lines means the reusable workflow passed every
+    // check the shipped audit performs: least-privilege scopes, no persisted
+    // checkout credentials, and no secret bridges beyond github-token.
+    expect(result.status, `audit of ${REUSABLE_PATH} must exit 0`).toBe(0);
+    expect(result.stdout + result.stderr).not.toContain("::error::");
+    expect(result.stdout).toContain("fork-boundary audit passed");
+
+    // runScript registers the directory holding the extracted step script, so
+    // the suite owns its lifetime instead of leaking it into the temp dir.
+    expect(tracker.size).toBe(trackedBefore + 1);
+    tracker.cleanup();
+    expect(tracker.size).toBe(0);
+  });
+
   it("audit script fails closed on workflows that request write or elevated scopes (#369 negative)", () => {
     const script = extractRunScript(workflowSource(), "fork-boundary-audit");
     const bad = fixtureWorkflow(
