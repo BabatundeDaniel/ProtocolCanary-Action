@@ -5,6 +5,7 @@ import * as path from "node:path";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 
 import type * as canaryModule from "../../src/canary";
+import type * as runnerModule from "../../src/runner";
 import type * as versionModule from "../../src/version";
 
 const { setFailedMock, errorMock, warningMock, infoMock } = vi.hoisted(() => ({
@@ -51,6 +52,31 @@ const { resolveVersionMock } = vi.hoisted(() => ({ resolveVersionMock: vi.fn() }
 vi.mock("../../src/version", async (importOriginal) => {
   const actual = await importOriginal<typeof versionModule>();
   return { ...actual, resolveVersion: resolveVersionMock };
+});
+
+// #644: `timeout-minutes` is floored at one minute, while the fixture's
+// `timeout` scenario hangs for ten seconds — so a real-time run would see the
+// engine finish before its deadline and never reach the execution-timeout
+// branch. This holder lets the timeout test shorten only the deadline handed
+// to the *real* `runCheck` (process supervision, `TimeoutError`, and the
+// diagnostic are the production ones); every other test keeps the deadline
+// derived from its inputs. The wrapper delegates to the actual module, so no
+// other runner behavior changes.
+const { runCheckDeadlineOverride } = vi.hoisted(() => ({
+  runCheckDeadlineOverride: { timeoutMs: undefined as number | undefined },
+}));
+
+vi.mock("../../src/runner", async (importOriginal) => {
+  const actual = await importOriginal<typeof runnerModule>();
+  return {
+    ...actual,
+    runCheck: (
+      binaryPath: string,
+      args: readonly string[],
+      timeoutMs: number,
+      options?: Parameters<typeof actual.runCheck>[3],
+    ) => actual.runCheck(binaryPath, args, runCheckDeadlineOverride.timeoutMs ?? timeoutMs, options),
+  };
 });
 
 // #278: the upload-report=true scenario asserts against the artifact client's
@@ -168,6 +194,7 @@ function setUp(scenario: string, version = "0.1.0", omitVersion = false): Fixtur
   }));
   uploadArtifactMock.mockReset();
   uploadArtifactMock.mockResolvedValue({ id: 1, size: 100 });
+  runCheckDeadlineOverride.timeoutMs = undefined;
 
   return { workDir, outputPath, summaryPath };
 }
@@ -450,6 +477,58 @@ describe.skipIf(process.platform === "win32")("Action end-to-end (via mock-canar
     expect(setFailedMock).toHaveBeenCalledTimes(1);
     expect(String(setFailedMock.mock.calls[0]?.[0])).toContain("could not be executed");
     expect(readOutputs(fixture.outputPath).status).toBe("execution-failed");
+  });
+
+  // #644: the only execution-failure branch the suite did not exercise. The
+  // fixture's `timeout` scenario never emits a report: it holds the process
+  // open for ten seconds to simulate a hung engine. The Action's own deadline
+  // is bounded to 2s for this test (see `runCheckDeadlineOverride`), so
+  // `runCheck` rejects with a `TimeoutError` and `run()` must fail the job,
+  // annotate the execution failure, write the job summary, set the
+  // execution-failure outputs, and return without throwing.
+  it("timeout: a hung engine fails the job, annotates, summarizes, and returns cleanly (#644)", async () => {
+    fixture = setUp("timeout");
+    runCheckDeadlineOverride.timeoutMs = 2_000;
+    const { run } = await import("../../src/main");
+
+    // Returning cleanly — never rejecting past the Action boundary — is the
+    // contract this branch exists to uphold; an escaped rejection would fail
+    // this assertion (or surface as an unhandled rejection in the suite).
+    await expect(run()).resolves.toBeUndefined();
+
+    // core.setFailed names the timeout as the reason the engine could not run.
+    expect(setFailedMock).toHaveBeenCalledTimes(1);
+    const failure = String(setFailedMock.mock.calls[0]?.[0]);
+    expect(failure).toContain("could not be executed");
+    expect(failure).toContain("timed out");
+
+    // Annotations are enabled, so exactly one execution-failure annotation is
+    // emitted. The hung engine produced no stderr, so there is no engine
+    // diagnostic block appended.
+    expect(errorMock).toHaveBeenCalledTimes(1);
+    const annotation = String(errorMock.mock.calls[0]?.[0]);
+    expect(annotation).toContain("could not be executed");
+    expect(annotation).toContain("timed out");
+    expect(annotation).not.toContain("Engine diagnostic:");
+
+    // The job summary is written and states the execution failure.
+    const summary = fs.readFileSync(fixture.summaryPath, "utf8");
+    expect(summary).toContain("🚫 **ERROR**");
+    expect(summary).toContain("Protocol Canary could not be executed.");
+    expect(summary).toContain("timed out");
+    expect(summary).toContain("(no diagnostic output)");
+
+    // A timed-out engine produced no report, so the documented
+    // execution-failure outputs apply: status execution-failed, zero counts,
+    // no coverage, no report path, and the resolved engine version retained.
+    const outputs = readOutputs(fixture.outputPath);
+    expect(outputs.status).toBe("execution-failed");
+    expect(outputs.passed).toBe("0");
+    expect(outputs.failures).toBe("0");
+    expect(outputs.total).toBe("0");
+    expect(outputs["coverage-state"]).toBe("none");
+    expect(outputs["engine-version"]).toBe("0.1.0");
+    expect(outputs.report).toBeUndefined();
   });
 
   it("many-failures: summary lists all 60 failures even though GitHub truncates annotations at 50", async () => {
