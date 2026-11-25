@@ -21,7 +21,7 @@ describe("consumeResponse", () => {
   it("rejects an oversized Content-Length before processing data", async () => {
     const incoming = response({ "content-length": "3" });
     const onChunk = vi.fn();
-    const pending = consumeResponse(incoming as IncomingMessage, "https://example.test/body", 2, onChunk);
+    const pending = consumeResponse(incoming as unknown as IncomingMessage, "https://example.test/body", 2, onChunk);
 
     await expect(pending).rejects.toThrow("example.test exceeds the 2-byte limit");
     expect(onChunk).not.toHaveBeenCalled();
@@ -31,7 +31,7 @@ describe("consumeResponse", () => {
   it("destroys the response and rejects before delivering an oversized chunk", async () => {
     const incoming = response();
     const onChunk = vi.fn();
-    const pending = consumeResponse(incoming as IncomingMessage, "https://example.test/body", 2, onChunk);
+    const pending = consumeResponse(incoming as unknown as IncomingMessage, "https://example.test/body", 2, onChunk);
 
     incoming.emit("data", Buffer.from("ok"));
     incoming.emit("data", Buffer.from("!"));
@@ -44,7 +44,7 @@ describe("consumeResponse", () => {
 
   it("rejects a response that ends before its Content-Length is received", async () => {
     const incoming = response({ "content-length": "5" });
-    const pending = consumeResponse(incoming as IncomingMessage, "https://example.test/body", 5, vi.fn());
+    const pending = consumeResponse(incoming as unknown as IncomingMessage, "https://example.test/body", 5, vi.fn());
 
     incoming.emit("data", Buffer.from("hi"));
     incoming.emit("end");
@@ -57,7 +57,7 @@ describe("consumeResponse", () => {
 describe("readResponseText", () => {
   it("preserves a multi-byte UTF-8 code point split across chunks", async () => {
     const incoming = response({ "content-length": "3" });
-    const pending = readResponseText(incoming as IncomingMessage, "https://example.test/body", 3);
+    const pending = readResponseText(incoming as unknown as IncomingMessage, "https://example.test/body", 3);
     const bytes = Buffer.from("€");
 
     incoming.emit("data", bytes.subarray(0, 1));
